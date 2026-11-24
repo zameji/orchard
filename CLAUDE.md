@@ -8,7 +8,7 @@ Orchard Fieldwork — Pruning Studio: an interactive 3D tree-pruning simulator a
 
 ## Commands
 
-- `npm install` — install dev tooling (also installs the git hooks via husky).
+- `npm ci` — install dev tooling from the lockfile (also installs the git hooks via husky). Use `npm install` when adding or bumping a dependency.
 - `npm run build` — minify `src/*.html` (exactly one) to `dist/index.html` (`build.mjs`, html-minifier-terser).
 - `npm run lint` — ESLint 9 flat config over source and inline module JS (`eslint-plugin-html`).
 - `npm run format` / `npm run format:check` — Prettier write/check (dist and node_modules ignored).
@@ -17,7 +17,7 @@ There is no test suite. To validate a source change: `npm run lint`, `npm run bu
 
 ## Pre-commit hook
 
-`.husky/pre-commit` runs lint-staged (eslint --fix + prettier on staged files), then `npm run build`, then stages `dist/`. Every commit therefore carries an in-sync minified artifact — never edit `dist/` by hand, and expect its diff to be unreadable (see `docs/adrs/0001-minified-committed-dist.md`).
+`.husky/pre-commit` refuses to run when `src/` has unstaged or untracked changes, then runs lint-staged (eslint --fix + prettier on staged files), then `npm run build`, then stages `dist/`. Every commit therefore carries an in-sync minified artifact — never edit `dist/` by hand, and expect its diff to be unreadable (see `docs/adrs/0001-minified-committed-dist.md`).
 
 ## Repository layout
 
