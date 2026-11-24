@@ -71,31 +71,41 @@
       }
       button,
       input,
-      select {
+      select,
+      .headButtons a {
         font: inherit;
       }
       button,
       select,
-      input[type='number'] {
+      input[type='number'],
+      .headButtons a {
         border: 1px solid var(--line);
         border-radius: 10px;
         color: var(--ink);
         background: #fffef8;
       }
-      button {
+      button,
+      .headButtons a {
         cursor: pointer;
         padding: 8px 12px;
         min-height: 38px;
         font-weight: 650;
         line-height: 1.15;
       }
+      .headButtons a {
+        display: inline-flex;
+        align-items: center;
+        text-decoration: none;
+      }
       button:active {
         transform: translateY(1px);
       }
-      button:hover:not(:disabled) {
+      button:hover:not(:disabled),
+      .headButtons a:hover {
         border-color: #879a7c;
       }
       button:focus-visible,
+      .headButtons a:focus-visible,
       select:focus-visible,
       input:focus-visible,
       canvas:focus-visible {
@@ -173,7 +183,8 @@
         gap: 5px;
         pointer-events: auto;
       }
-      .headButtons button {
+      .headButtons button,
+      .headButtons a {
         background: #f4f8eecf;
         border-color: #d4dfcd;
         backdrop-filter: blur(8px);
@@ -429,7 +440,8 @@
         .tabs button {
           flex: 1;
         }
-        .headButtons button {
+        .headButtons button,
+        .headButtons a {
           padding: 6px 8px;
           min-height: 33px;
         }
@@ -497,7 +509,13 @@
         </div>
         <div class="headButtons">
           <button id="fit">Fit tree</button
-          ><button id="full">Fullscreen</button>
+          ><button id="full">Fullscreen</button
+          ><a
+            href="https://github.com/zameji/orchard"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Code ↗</a
+          >
         </div>
       </header>
       <section id="hud" aria-label="Current tree">
