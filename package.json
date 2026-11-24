@@ -9,10 +9,20 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "node build.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,mjs,html}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
     "eslint": "^9.0.0",
