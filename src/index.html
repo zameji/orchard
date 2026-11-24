@@ -1,0 +1,2780 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#20372e" />
+    <title>Orchard Fieldwork — Pruning Studio</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+        }
+      }
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #20372e;
+        --muted: #56685b;
+        --paper: #fafbf2;
+        --line: #d8dfcf;
+        --lime: #d7ef88;
+        --dark: #20382f;
+        --orange: #ff9673;
+        font:
+          14px/1.4 system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body,
+      #app {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        background: #cddccd;
+        color: var(--ink);
+      }
+      #app {
+        position: relative;
+        width: 100vw;
+        height: 100dvh;
+        isolation: isolate;
+      }
+      #app.expanded {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        height: 100dvh;
+      }
+      canvas#view {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button,
+      select,
+      input[type='number'] {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--ink);
+        background: #fffef8;
+      }
+      button {
+        cursor: pointer;
+        padding: 8px 12px;
+        min-height: 38px;
+        font-weight: 650;
+        line-height: 1.15;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button:hover:not(:disabled) {
+        border-color: #879a7c;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      canvas:focus-visible {
+        outline: 3px solid #5e9c75;
+        outline-offset: 2px;
+      }
+      button:disabled {
+        opacity: 0.44;
+        cursor: not-allowed;
+      }
+      button[aria-pressed='true'],
+      button[aria-expanded='true'] {
+        background: #e1edc5;
+        border-color: #a4bc83;
+      }
+      .green {
+        background: var(--lime);
+        border-color: #c1d77b;
+      }
+      .dark {
+        background: var(--dark);
+        border-color: var(--dark);
+        color: #fff;
+      }
+      .warn {
+        background: #ffad8c;
+        border-color: #ec9274;
+      }
+      header {
+        position: absolute;
+        top: max(10px, env(safe-area-inset-top));
+        left: max(12px, env(safe-area-inset-left));
+        right: max(12px, env(safe-area-inset-right));
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .mark {
+        width: 40px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        background: var(--dark);
+        border-radius: 12px 12px 18px 12px;
+        color: var(--lime);
+      }
+      .mark svg {
+        width: 30px;
+        height: 30px;
+      }
+      .kicker,
+      .eyebrow,
+      .tag {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-weight: 780;
+      }
+      h1 {
+        font:
+          600 clamp(19px, 3vw, 29px) / 1.04 Georgia,
+          serif;
+        letter-spacing: -0.04em;
+        margin: 2px 0 0;
+      }
+      .headButtons {
+        display: flex;
+        gap: 5px;
+        pointer-events: auto;
+      }
+      .headButtons button {
+        background: #f4f8eecf;
+        border-color: #d4dfcd;
+        backdrop-filter: blur(8px);
+        font-size: 12px;
+      }
+      #hud {
+        position: absolute;
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(10px, env(safe-area-inset-top)) + 55px);
+        background: #23392fef;
+        color: #f6faed;
+        border-radius: 12px;
+        padding: 9px 12px;
+        pointer-events: none;
+        box-shadow: 0 2px 12px #26372516;
+        max-width: calc(100% - 24px);
+      }
+      .hudTop {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tag {
+        letter-spacing: 0.07em;
+        color: var(--lime);
+        white-space: nowrap;
+      }
+      #habit {
+        font-weight: 650;
+        font-size: 12px;
+      }
+      .hudData {
+        font-size: 11px;
+        color: #d7dfcf;
+        margin-top: 3px;
+      }
+      #notice {
+        position: absolute;
+        right: max(12px, env(safe-area-inset-right));
+        top: calc(max(10px, env(safe-area-inset-top)) + 55px);
+        max-width: min(330px, calc(100vw - 24px));
+        padding: 10px 13px;
+        background: #fbfcf1f5;
+        border: 1px solid #c6d3ba;
+        border-radius: 12px;
+        font-size: 12px;
+        box-shadow: 0 4px 16px #142e2020;
+        pointer-events: none;
+      }
+      #dock {
+        position: absolute;
+        bottom: max(8px, env(safe-area-inset-bottom));
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(
+          780px,
+          calc(
+            100vw - 16px - env(safe-area-inset-left) -
+              env(safe-area-inset-right)
+          )
+        );
+        background: #fafbf2f2;
+        border: 1px solid #fff9;
+        border-radius: 18px;
+        box-shadow: 0 8px 36px #17382d30;
+        backdrop-filter: blur(12px);
+        overflow: hidden;
+      }
+      .tabs,
+      .actions,
+      .row,
+      .pills {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .tabs {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--line);
+        gap: 3px;
+        flex-wrap: nowrap;
+      }
+      .tabs button {
+        background: transparent;
+        border-color: transparent;
+        font-size: 12px;
+        min-height: 33px;
+        padding: 6px 10px;
+      }
+      .tabs button[aria-expanded='true'] {
+        background: #deebc6;
+      }
+      .tabs .push {
+        margin-left: auto;
+      }
+      #hint {
+        font-size: 11px;
+        color: var(--muted);
+        text-align: right;
+        padding: 0 5px;
+      }
+      .actions {
+        padding: 8px;
+        gap: 5px;
+      }
+      .actions button {
+        flex: 1 0 auto;
+        font-size: 12px;
+      }
+      .actions .green {
+        flex: 1.4;
+      }
+      #content {
+        max-height: min(35dvh, 290px);
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+      .panel,
+      #preview {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .panel h2,
+      #preview h2 {
+        font:
+          600 20px/1.2 Georgia,
+          serif;
+        margin: 0 0 6px;
+      }
+      .panel p,
+      #why {
+        margin: 5px 0 9px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .formGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px 10px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      select,
+      input[type='number'] {
+        width: 100%;
+        padding: 7px 8px;
+        min-height: 36px;
+        font-weight: 550;
+        font-size: 13px;
+      }
+      input[type='range'] {
+        width: 100%;
+        accent-color: #456e50;
+      }
+      .row {
+        margin-top: 8px;
+      }
+      .row button,
+      .pills button {
+        font-size: 12px;
+      }
+      .pills {
+        margin: 6px 0;
+      }
+      #welcome {
+        font-size: 12px;
+      }
+      .legend {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .legend i {
+        width: 65px;
+        height: 6px;
+        background: linear-gradient(90deg, #54549f, #77ad85, #ffe174);
+        border-radius: 3px;
+      }
+      #recList {
+        display: grid;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      #recList button {
+        text-align: left;
+        min-height: 30px;
+        font-size: 12px;
+        background: #eaf2e0;
+      }
+      #preview {
+        background: #fff5e8;
+        max-height: 34dvh;
+        overflow: auto;
+      }
+      #preview h2 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      #cutScore {
+        font: 700 12px system-ui;
+        background: #e6ecce;
+        border-radius: 12px;
+        padding: 4px 8px;
+      }
+      #parts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        font-size: 11px;
+      }
+      #parts span {
+        border: 1px solid #dfd7c6;
+        padding: 3px 6px;
+        border-radius: 6px;
+        background: #fffaf0;
+      }
+      #preview .row {
+        justify-content: flex-end;
+      }
+      small,
+      .note {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      #fail {
+        position: absolute;
+        inset: 25% 10% auto;
+        padding: 20px;
+        background: var(--paper);
+        border-radius: 14px;
+      }
+      @media (max-width: 620px) {
+        .formGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        #hint {
+          display: none;
+        }
+        .tabs button {
+          flex: 1;
+        }
+        .headButtons button {
+          padding: 6px 8px;
+          min-height: 33px;
+        }
+        #notice {
+          left: max(12px, env(safe-area-inset-left));
+          right: auto;
+          top: calc(max(10px, env(safe-area-inset-top)) + 115px);
+        }
+        .actions button {
+          font-size: 11px;
+          padding: 7px 5px;
+          min-height: 37px;
+        }
+      }
+      @media (max-height: 490px) {
+        #hud {
+          top: 6px;
+          left: 40%;
+        }
+        .brand .kicker {
+          display: none;
+        }
+        #content,
+        #preview {
+          max-height: 31dvh;
+        }
+        .actions,
+        .tabs {
+          padding: 3px 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <canvas
+        id="view"
+        tabindex="0"
+        aria-label="Interactive fruit tree. Drag to orbit, pinch or scroll to zoom, tap a branch to preview a cut."
+      ></canvas>
+      <header id="header">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">
+            <svg
+              viewBox="0 0 32 32"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 28c1-7 5-14 9-24M16 19l-6-6m8 0 6-3" />
+              <path
+                d="M14 16C6 17 5 11 5 8c6-1 10 3 9 8ZM20 10c-2-6 1-8 5-8 1 5-1 7-5 8Z"
+                fill="currentColor"
+                stroke="none"
+              />
+              <circle cx="24" cy="16" r="4.1" />
+            </svg>
+          </div>
+          <div>
+            <div class="kicker">Orchard Fieldwork</div>
+            <h1>Pruning studio</h1>
+          </div>
+        </div>
+        <div class="headButtons">
+          <button id="fit">Fit tree</button
+          ><button id="full">Fullscreen</button>
+        </div>
+      </header>
+      <section id="hud" aria-label="Current tree">
+        <div class="hudTop">
+          <b class="tag" id="year"></b><span id="habit"></span>
+        </div>
+        <div id="stats" class="hudData"></div>
+      </section>
+      <div id="notice" role="status" hidden></div>
+      <section id="dock" aria-label="Pruning tools">
+        <div id="preview" hidden>
+          <div class="eyebrow">Proposed cut · coral wood will be removed</div>
+          <h2><span id="cutTitle"></span><b id="cutScore"></b></h2>
+          <p id="why"></p>
+          <div id="parts"></div>
+          <div class="row">
+            <button id="cancel">Cancel</button
+            ><button id="confirm" class="warn">Confirm cut</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <button data-tab="orchard" aria-expanded="false">Tree setup</button>
+          <button data-tab="light" aria-expanded="false">Sun path</button>
+          <button data-tab="guide" aria-expanded="false">Learn</button>
+          <button data-tab="help" aria-expanded="false">Field notes</button>
+          <span id="hint" class="push">Tap wood to inspect a cut</span>
+        </div>
+        <div id="content">
+          <section class="panel" id="orchard" hidden>
+            <div class="eyebrow">Planting card</div>
+            <h2>Set up a specimen</h2>
+            <div class="formGrid">
+              <label
+                >Species<select id="species">
+                  <option>Apple</option>
+                  <option>Cherry</option>
+                  <option>Peach</option>
+                </select></label
+              >
+              <label>Growth habit<select id="cultivar"></select></label>
+              <label>Starting year<select id="startYear"></select></label>
+              <label
+                >Unsigned seed<input
+                  id="seed"
+                  type="number"
+                  min="0"
+                  max="4294967295"
+                  step="1"
+                  value="74129"
+              /></label>
+              <label
+                >Detail cap<select id="detail">
+                  <option value="low">Low · 1.5k</option>
+                  <option value="medium">Medium · 4k</option>
+                  <option value="high">High · 10k</option>
+                  <option value="ultra">Ultra · 20k</option>
+                </select></label
+              >
+            </div>
+            <div class="row">
+              <button id="plant" class="dark">Apply &amp; replant</button
+              ><button id="random">New seed / randomize</button
+              ><button id="reset">Reset tree</button>
+            </div>
+            <small
+              >Replanting starts a new history. Reset restores the last planted
+              starting tree.</small
+            >
+          </section>
+          <section class="panel" id="light" hidden>
+            <div class="eyebrow">Canopy inspection</div>
+            <h2>Follow the sunlight</h2>
+            <label
+              >Solar time <output id="clock"></output
+              ><input
+                type="range"
+                id="time"
+                min="6"
+                max="18"
+                value="12"
+                step=".1"
+            /></label>
+            <div class="pills">
+              <button data-time="8">Morning</button
+              ><button data-time="12">Noon</button
+              ><button data-time="16">Evening</button>
+              <button id="heat">Exposure overlay</button
+              ><button id="rays">Sun guide</button>
+            </div>
+            <div class="legend">
+              Shaded <i></i> Exposed <span id="lightReading"></span>
+            </div>
+            <p>
+              Wood color follows this instant. Fruit set uses a
+              morning–midday–afternoon average, not the inspector clock.
+            </p>
+          </section>
+          <section class="panel" id="guide" hidden>
+            <div class="eyebrow">Guided practice</div>
+            <h2>Read the structure</h2>
+            <div class="row">
+              <button id="learn">Learn mode: Off</button
+              ><label style="flex: 1"
+                >Training system<select id="system">
+                  <option value="leader">Central leader / spindle</option>
+                  <option value="vase">Open center / vase</option>
+                  <option value="renovate">
+                    Neglected tree · 3-year renovation
+                  </option>
+                </select></label
+              >
+            </div>
+            <p id="systemNote"></p>
+            <div id="recList"></div>
+          </section>
+          <section class="panel" id="help" hidden>
+            <div class="eyebrow">Field manual / 01</div>
+            <h2>Inspect, then prune</h2>
+            <p>
+              Drag to orbit. Pinch or scroll to zoom. Two fingers, right-drag or
+              Shift+drag pan across the crown. Switch the one-finger tool below
+              if needed. Fit tree recenters the view.
+            </p>
+            <div class="row"><button id="pan">One finger: Orbit</button></div>
+            <p>
+              Tap a shoot near its union for a collar cut. Tap farther along it
+              for a heading cut. Near a side fork, the outgoing branch collar
+              takes priority. The rooted stem is protected. Hide leaves for a
+              clearer view.
+            </p>
+            <p>
+              Confirm only after checking the coral preview. Undo works until
+              you advance the year. +1 year harvests the standing fruit and
+              grows a new canopy in a single step.
+            </p>
+            <p class="note">
+              A teaching model, not a yield forecast. Ages refer to completed
+              growing seasons: last year's extension is one-year wood. Removal
+              budgets use live shoot length, not fruit count.
+            </p>
+          </section>
+        </div>
+        <div class="actions">
+          <button id="next" class="green">+1 Year</button
+          ><button id="undo" disabled>Undo cut</button>
+          <button id="leaves">Foliage: On</button
+          ><button id="fruit">Fruit: On</button>
+        </div>
+      </section>
+      <div id="fail" role="alert" hidden></div>
+    </main>
+    <script type="module">
+      import * as THREE from 'three';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+      const $ = (id) => document.getElementById(id);
+      const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+      const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+      const UP = V(0, 1, 0),
+        TAU = Math.PI * 2,
+        DEG = Math.PI / 180,
+        GOLD = 2.39996323;
+      const pct = (x) => Math.round(100 * x) + '%',
+        signed = (x) => (x > 0 ? '+' : '') + x;
+      function mulberry32(s) {
+        return () => {
+          let t = (s += 0x6d2b79f5);
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      // Stateless draws keep bud sites stable across inspection, undo and redraw.
+      function noise(seed, id, k) {
+        let v =
+          (seed ^
+            Math.imul(id + 1, 0x9e3779b1) ^
+            Math.imul(k + 31, 0x85ebca6b)) >>>
+          0;
+        v = Math.imul(v ^ (v >>> 16), 0x7feb352d);
+        v = Math.imul(v ^ (v >>> 15), 0x846ca68b);
+        return ((v ^ (v >>> 16)) >>> 0) / 4294967296;
+      }
+      const caps = {
+        low: {
+          max: 1500,
+          sides: 5,
+          density: 0.85,
+          clusters: 5600,
+          dpr: 1.5,
+          leaves: 4,
+        },
+        medium: {
+          max: 4000,
+          sides: 7,
+          density: 1.12,
+          clusters: 13500,
+          dpr: 1.8,
+          leaves: 5,
+        },
+        high: {
+          max: 10000,
+          sides: 9,
+          density: 1.38,
+          clusters: 31000,
+          dpr: 2.4,
+          leaves: 5,
+        },
+        ultra: {
+          max: 20000,
+          sides: 12,
+          density: 1.65,
+          clusters: 56000,
+          dpr: 3,
+          leaves: 6,
+        },
+      };
+      // v = extension vigor, ap = apical dominance, angle = primary union angle,
+      // react = heading response, sag = fruit-load compliance, cal = wood caliber.
+      const profiles = [
+        {
+          sp: 'Apple',
+          name: 'Spur-bearing Upright',
+          mode: 'spur',
+          v: 0.99,
+          ap: 0.94,
+          angle: 43,
+          react: 1,
+          sag: 0.75,
+          cal: 1.03,
+          sys: 'leader',
+          food: 'Keep bright, compact spurs on two- to four-year wood.',
+        },
+        {
+          sp: 'Apple',
+          name: 'Tip-bearing Spreading',
+          mode: 'tip',
+          v: 1.01,
+          ap: 0.66,
+          angle: 60,
+          react: 1.03,
+          sag: 1.48,
+          cal: 0.93,
+          sys: 'vase',
+          food: 'Preserve last year’s lateral terminals; heading removes their crop.',
+        },
+        {
+          sp: 'Apple',
+          name: 'Vigorous Standard',
+          mode: 'mixed',
+          v: 1.15,
+          ap: 0.79,
+          angle: 53,
+          react: 1.55,
+          sag: 1.1,
+          cal: 1.24,
+          sys: 'leader',
+          food: 'Retain mixed spurs and terminals. Large cuts provoke strong watersprouts.',
+        },
+        {
+          sp: 'Cherry',
+          name: 'Sweet Upright Leader',
+          mode: 'sweet',
+          v: 1.05,
+          ap: 0.97,
+          angle: 43,
+          react: 0.95,
+          sag: 0.72,
+          cal: 0.96,
+          sys: 'leader',
+          food: 'Save short laterals and bright two- to five-year spurs.',
+        },
+        {
+          sp: 'Cherry',
+          name: 'Tart / Bush Spreading',
+          mode: 'tart',
+          v: 0.97,
+          ap: 0.61,
+          angle: 62,
+          react: 0.95,
+          sag: 1.42,
+          cal: 0.9,
+          sys: 'vase',
+          food: 'Keep both young terminals and illuminated spur-bearing wood.',
+        },
+        {
+          sp: 'Peach',
+          name: 'Open-Vase Renewal',
+          mode: 'peach',
+          v: 1.1,
+          ap: 0.55,
+          angle: 54,
+          react: 1.16,
+          sag: 1.12,
+          cal: 0.95,
+          sys: 'vase',
+          food: 'Renew sunlit one-year shoots in the lower and middle bowl; old spurs do not crop.',
+        },
+      ];
+      let P = profiles[0],
+        C = caps.low,
+        config,
+        T,
+        M,
+        selected = null,
+        undoLog = [],
+        recs = [];
+      let showLeaves = true,
+        showFruit = true,
+        overlay = false,
+        guideSun = false,
+        learning = false,
+        panOnly = false;
+      let system = 'leader',
+        renovationStart = 5,
+        tab = '',
+        hour = 12;
+      const budget = () => (P.sp === 'Peach' ? 0.32 : 0.27);
+      const sunDir = (h) => {
+        const a = ((h - 6) * Math.PI) / 12;
+        return V(
+          Math.cos(a),
+          0.075 + 0.98 * Math.sin(a),
+          -0.14 - 0.44 * Math.sin(a),
+        ).normalize();
+      };
+      const seasonSuns = [sunDir(8.5), sunDir(12), sunDir(15.5)];
+      const n = (q, k) => noise(T.seed, q.s.id, k);
+
+      const canvas = $('view');
+      let renderer;
+      try {
+        renderer = new THREE.WebGLRenderer({
+          canvas,
+          antialias: true,
+          alpha: false,
+          powerPreference: 'high-performance',
+        });
+      } catch (e) {
+        $('fail').hidden = false;
+        $('fail').textContent =
+          'The studio needs WebGL 2. Enable hardware acceleration or try a WebGL-capable browser.';
+        throw e;
+      }
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      const scene = new THREE.Scene(),
+        camera = new THREE.PerspectiveCamera(43, 1, 0.035, 210);
+      camera.position.set(3.4, 2.15, 4.8);
+      const controls = new OrbitControls(camera, canvas);
+      Object.assign(controls, {
+        enableDamping: true,
+        dampingFactor: 0.105,
+        enableRotate: true,
+        enableZoom: true,
+        enablePan: true,
+        screenSpacePanning: true,
+        minDistance: 0.32,
+        maxDistance: 65,
+        maxPolarAngle: Math.PI * 0.512,
+      });
+      controls.touches.ONE = THREE.TOUCH.ROTATE;
+      controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+      controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+      const hemi = new THREE.HemisphereLight(0xe8f1ff, 0xa4ab82, 1.85);
+      const sunlight = new THREE.DirectionalLight(0xffe3b2, 2.25);
+      scene.add(hemi, sunlight, sunlight.target);
+
+      const sky = new THREE.Mesh(
+        new THREE.SphereGeometry(96, 32, 18),
+        new THREE.ShaderMaterial({
+          side: THREE.BackSide,
+          depthWrite: false,
+          uniforms: { sun: { value: sunDir(hour) } },
+          vertexShader: `varying vec3 p;void main(){p=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+          fragmentShader: `varying vec3 p;uniform vec3 sun;
+ void main(){vec3 d=normalize(p);float h=pow(max(d.y,0.),.52);
+ vec3 rim=mix(vec3(1.,.65,.38),vec3(.85,.90,.78),sun.y);
+ vec3 zen=mix(vec3(.30,.49,.62),vec3(.23,.52,.70),sun.y);
+ float glow=pow(max(dot(d,sun),0.),140.);
+ gl_FragColor=vec4(mix(rim,zen,h)+vec3(1.,.65,.22)*glow*.85,1.);
+ #include <colorspace_fragment>
+ }`,
+        }),
+      );
+      sky.renderOrder = -10;
+      scene.add(sky);
+      const orbMat = new THREE.MeshBasicMaterial({
+        color: 0xffed99,
+        toneMapped: false,
+      });
+      const skySun = new THREE.Mesh(
+        new THREE.SphereGeometry(1.32, 18, 12),
+        orbMat,
+      );
+      scene.add(skySun);
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(85, 80),
+        new THREE.MeshLambertMaterial({ color: 0xb7c4a6 }),
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.024;
+      scene.add(ground);
+      const grid = new THREE.GridHelper(32, 64, 0x7c9277, 0x8a9b81);
+      grid.material.transparent = true;
+      grid.material.opacity = 0.23;
+      grid.position.y = -0.021;
+      scene.add(grid);
+      const contact = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          vertexShader: `varying vec2 v;void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+          fragmentShader: `varying vec2 v;void main(){float a=1.-smoothstep(.04,.5,length(v-.5));gl_FragColor=vec4(.18,.23,.14,a*.19);}`,
+        }),
+      );
+      contact.rotation.x = -Math.PI / 2;
+      contact.position.y = -0.017;
+      scene.add(contact);
+      const rig = new THREE.Group();
+      scene.add(rig);
+      const arcPts = Array.from({ length: 49 }, (_, i) => sunDir(6 + i / 4));
+      const arc = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(arcPts),
+        new THREE.LineBasicMaterial({
+          color: 0xffe59a,
+          transparent: true,
+          opacity: 0.76,
+        }),
+      );
+      const rayGeo = new THREE.BufferGeometry().setFromPoints([V(), V()]);
+      const ray = new THREE.Line(
+        rayGeo,
+        new THREE.LineDashedMaterial({
+          color: 0xffe79f,
+          dashSize: 0.09,
+          gapSize: 0.055,
+        }),
+      );
+      const probe = new THREE.Mesh(
+        new THREE.SphereGeometry(0.037, 14, 8),
+        orbMat,
+      );
+      rig.add(arc, ray, probe);
+      const treeGroup = new THREE.Group(),
+        markers = new THREE.Group();
+      scene.add(treeGroup, markers);
+      let billboards = [],
+        raf = 0;
+      function invalidate() {
+        if (!raf) raf = requestAnimationFrame(frame);
+      }
+      function frame() {
+        raf = 0;
+        controls.update();
+        for (const o of billboards) o.quaternion.copy(camera.quaternion);
+        renderer.render(scene, camera);
+      }
+      controls.addEventListener('change', invalidate);
+      function viewport() {
+        const w = canvas.clientWidth || 1,
+          h = canvas.clientHeight || 1;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        const dockTop =
+          $('dock').getBoundingClientRect().top -
+          canvas.getBoundingClientRect().top;
+        const top = Math.min(
+          h * 0.22,
+          $('hud').getBoundingClientRect().bottom -
+            canvas.getBoundingClientRect().top +
+            7,
+        );
+        const center = (top + Math.max(dockTop - 4, top + 0.14 * h)) * 0.5;
+        camera.setViewOffset(w, h, 0, h / 2 - center, w, h);
+        camera.updateProjectionMatrix();
+        invalidate();
+      }
+      new ResizeObserver(viewport).observe($('dock'));
+      window.addEventListener('resize', viewport);
+      function fitTree() {
+        if (!M) return;
+        viewport();
+        const box = new THREE.Box3();
+        for (const q of M.list) {
+          box.expandByPoint(q.a);
+          box.expandByPoint(q.b);
+        }
+        box.expandByScalar(0.09);
+        const center = box.getCenter(V()),
+          back = camera.position.clone().sub(controls.target).normalize();
+        if (back.lengthSq() < 0.1) back.set(0.5, 0.16, 0.9).normalize();
+        const right = V().crossVectors(UP, back).normalize(),
+          up = V().crossVectors(back, right).normalize();
+        const h = canvas.clientHeight || 1;
+        const available = clamp(
+          ($('dock').getBoundingClientRect().top -
+            $('hud').getBoundingClientRect().bottom -
+            12) /
+            h,
+          0.23,
+          0.9,
+        );
+        const tan = Math.tan((camera.fov * DEG) / 2);
+        let d = 1;
+        for (const q of M.list)
+          for (const p of [q.a, q.b]) {
+            const v = V().subVectors(p, center);
+            d = Math.max(
+              d,
+              v.dot(back) +
+                Math.max(
+                  (Math.abs(v.dot(right)) + 0.12) / (tan * camera.aspect * 0.9),
+                  (Math.abs(v.dot(up)) + 0.12) / (tan * available),
+                ),
+            );
+          }
+        controls.target.copy(center);
+        camera.position.copy(center).addScaledVector(back, d * 1.06);
+        controls.update();
+        invalidate();
+      }
+      function updateSun() {
+        const s = sunDir(hour);
+        sky.material.uniforms.sun.value.copy(s);
+        skySun.position.copy(s).multiplyScalar(88);
+        sunlight.position.copy(s).multiplyScalar(12);
+        sunlight.intensity = 1.35 + s.y * 1.25;
+        sunlight.color.setHSL(0.075 + 0.038 * s.y, 0.58 - 0.31 * s.y, 0.81);
+        const r = Math.max(
+          1.2,
+          (M?.height || 2.5) * 1.14,
+          (M?.spread || 1) * 0.6,
+        );
+        rig.visible = guideSun;
+        arc.scale.setScalar(r);
+        probe.position.copy(s).multiplyScalar(r);
+        probe.scale.setScalar(Math.max(1, r * 0.32));
+        const rp = rayGeo.attributes.position;
+        rp.setXYZ(0, ...probe.position.toArray());
+        rp.setXYZ(1, 0, 0.04, 0);
+        rp.needsUpdate = true;
+        rayGeo.computeBoundingSphere();
+        ray.computeLineDistances();
+        const mins = Math.round(hour * 60);
+        $('clock').value =
+          String(Math.floor(mins / 60)).padStart(2, '0') +
+          ':' +
+          String(mins % 60).padStart(2, '0');
+        invalidate();
+      }
+
+      // Graph state is plain data, in parent-before-child order. Rest directions
+      // never accumulate display deformations. Each edge is one annual extension.
+      function append(t, p, at, d, len, role, order, fork, born) {
+        const s = {
+          id: t.next++,
+          p,
+          at,
+          d: d.normalize().toArray(),
+          len,
+          role,
+          order,
+          fork,
+          born,
+          load: 0,
+          dead: false,
+          head: -10,
+          release: -10,
+        };
+        t.edges.push(s);
+        return s;
+      }
+      function fresh(seed) {
+        const t = {
+          seed,
+          year: 1,
+          next: 1,
+          edges: [],
+          removed: 0,
+          base: 1,
+          stress: 0,
+        };
+        const r = mulberry32(seed);
+        append(
+          t,
+          0,
+          1,
+          V((r() - 0.5) * 0.095, 1, (r() - 0.5) * 0.095),
+          0.63 + 0.11 * r(),
+          'leader',
+          0,
+          false,
+          1,
+        );
+        return t;
+      }
+      // A sun-aligned depth sweep. Sunward foliage deposits optical depth into
+      // neighboring projected cells. This is independent of the foliage display.
+      function exposures(list, s) {
+        const u = V().crossVectors(UP, s).normalize(),
+          v = V().crossVectors(s, u).normalize();
+        const order = list.slice().sort((a, b) => b.mid.dot(s) - a.mid.dot(s));
+        const map = new Map(),
+          cell = 0.37,
+          out = new Float32Array(list.length);
+        const key = (x, y) => x * 1048576 + y;
+        for (const q of order) {
+          const x = Math.floor(q.mid.dot(u) / cell),
+            y = Math.floor(q.mid.dot(v) / cell),
+            k = key(x, y);
+          const shade = map.get(k) || 0;
+          const face = clamp(
+            0.47 + 0.3 * s.y + 0.24 * (q.dir.dot(s) + 1) * 0.5,
+          );
+          out[q.i] = clamp(0.095 + face * Math.exp(-shade * 0.72), 0.075, 1);
+          if (q.s.dead) continue;
+          const w =
+            (q.age <= 1 ? 0.75 : q.age < 6 ? 0.46 : 0.23) *
+            clamp(q.s.len / 0.4, 0.38, 1.35);
+          map.set(k, shade + w);
+          for (let j = -1; j <= 1; j++)
+            for (let i = -1; i <= 1; i++)
+              if (i || j) {
+                const k2 = key(x + i, y + j);
+                map.set(k2, (map.get(k2) || 0) + w * (i && j ? 0.12 : 0.28));
+              }
+        }
+        return out;
+      }
+      function findCrossings(list) {
+        // Test non-adjacent centerlines in local buckets; exclude unions and
+        // samples close to endpoints to avoid flagging legitimate scaffolds.
+        const bins = new Map(),
+          cell = 0.32;
+        const hash = (x, y, z) => `${x}/${y}/${z}`;
+        for (const q of list) {
+          const p = q.mid,
+            x = Math.floor(p.x / cell),
+            y = Math.floor(p.y / cell),
+            z = Math.floor(p.z / cell);
+          if (q.s.order)
+            for (let a = -1; a <= 1 && !q.cross; a++)
+              for (let b = -1; b <= 1 && !q.cross; b++)
+                for (let c = -1; c <= 1 && !q.cross; c++) {
+                  const bin = bins.get(hash(x + a, y + b, z + c));
+                  if (!bin) continue;
+                  for (const j of bin) {
+                    if (
+                      j === q.par ||
+                      j.par === q.par ||
+                      j === q.par?.par ||
+                      Math.abs(q.dir.dot(j.dir)) > 0.92
+                    )
+                      continue;
+                    const offset = V().subVectors(q.a, j.a),
+                      dot = q.dir.dot(j.dir),
+                      u = q.dir.dot(offset),
+                      v = j.dir.dot(offset);
+                    const t = clamp(
+                        (dot * v - u) / (1 - dot * dot),
+                        0,
+                        q.s.len,
+                      ),
+                      s = clamp(v + dot * t, 0, j.s.len);
+                    if (t < 0.1 * q.s.len || s < 0.1 * j.s.len) continue;
+                    if (
+                      offset
+                        .addScaledVector(q.dir, t)
+                        .addScaledVector(j.dir, -s)
+                        .length() <
+                      0.035 + q.r + j.r
+                    ) {
+                      q.cross = true;
+                      break;
+                    }
+                  }
+                }
+          const k = hash(x, y, z);
+          if (!bins.has(k)) bins.set(k, []);
+          const bin = bins.get(k);
+          if (bin.length < 20) bin.push(q);
+        }
+      }
+      function potential(q) {
+        const a = q.age,
+          m = P.mode,
+          side = q.s.order > 0;
+        if (q.s.dead || !side) return { sp: 0, shoot: 0 };
+        const good = a >= 2 && a <= (m === 'sweet' ? 5 : 4),
+          old = a >= 2;
+        let sp = 0,
+          shoot = 0;
+        if (old && m !== 'peach') {
+          const intensity = {
+            spur: 1,
+            tip: 0.1,
+            mixed: 0.62,
+            sweet: 0.94,
+            tart: 0.48,
+          }[m];
+          sp = intensity * (good ? 1 : Math.max(0.1, 0.56 - (a - 5) * 0.09));
+        }
+        if (a === 1) {
+          const terminal = !q.kids.some((k) => k.s.at > 0.955);
+          if (m === 'peach') shoot = 1;
+          else if (m === 'tip') shoot = terminal ? 1 : 0.04;
+          else if (m === 'tart') shoot = terminal ? 0.93 : 0.36;
+          else if (m === 'mixed') shoot = terminal ? 0.76 : 0.1;
+          else if (m === 'sweet') shoot = q.s.len < 0.35 ? 0.46 : 0.08;
+          else shoot = terminal ? 0.1 : 0;
+        }
+        return { sp, shoot };
+      }
+      function crop(q, t) {
+        q.buds = [];
+        q.fruits = [];
+        q.diameter = 0;
+        const f = potential(q);
+        q.potential = f.sp + f.shoot;
+        if (!q.potential) return;
+        const m = P.mode,
+          ch = P.sp === 'Cherry',
+          pe = P.sp === 'Peach';
+        const ripe = t.year >= (pe ? 2 : 3);
+        // Spur locations depend on identity, not the order of other branches.
+        const stations = f.sp
+          ? Math.max(
+              2,
+              Math.min(7, Math.round(q.s.len * (m === 'spur' ? 10 : 7))),
+            )
+          : pe
+            ? Math.max(2, Math.round(q.s.len * 8))
+            : m === 'tart'
+              ? 2
+              : 1;
+        for (let k = 0; k < stations; k++) {
+          const r = (j) => noise(t.seed, q.s.id, 100 + k * 19 + j);
+          let at = f.sp
+            ? 0.14 + (0.73 * (k + 0.27 + 0.42 * r(0))) / stations
+            : pe
+              ? 0.14 + (0.72 * (k + 0.5)) / stations
+              : 1;
+          if (!f.sp && m === 'tart' && k === 0) at = 0.62;
+          const az = TAU * r(1),
+            ex = clamp(q.light + (r(2) - 0.5) * 0.12);
+          if (f.sp && r(3) < Math.min(1, f.sp + 0.13))
+            q.buds.push({ at, az, len: 0.025 + 0.035 * r(4) });
+          const limit =
+            Math.max(f.sp, f.shoot) *
+            clamp((ex - 0.17) / 0.64) *
+            (0.97 - t.stress * 0.64);
+          if (!ripe || ex < 0.24 || r(5) > limit) continue;
+          const count = ch
+            ? 2 + Math.floor(r(6) * 3)
+            : f.sp && m === 'spur' && r(6) > 0.71
+              ? 2
+              : 1;
+          for (let j = 0; j < count; j++) {
+            const diameter =
+              (ch ? 0.024 : pe ? 0.069 : m === 'mixed' ? 0.088 : 0.074) *
+              (0.7 + 0.31 * ex + 0.09 * r(7) - 0.027 * (count - 1));
+            q.fruits.push({
+              at,
+              az: az + (j - (count - 1) / 2) * 0.93,
+              d: diameter,
+              ex,
+              shade: r(8),
+              spur: !!f.sp,
+            });
+            q.diameter += diameter;
+          }
+        }
+      }
+      function derive(t) {
+        const list = [],
+          map = new Map();
+        for (const s of t.edges) {
+          const par = map.get(s.p),
+            q = {
+              s,
+              par,
+              i: list.length,
+              kids: [],
+              age: t.year - s.born,
+              rest: V(...s.d),
+              pipe: 0,
+              burden: s.load || 0,
+              cross: false,
+            };
+          list.push(q);
+          map.set(s.id, q);
+          if (par) par.kids.push(q);
+        }
+        for (let i = list.length - 1; i >= 0; i--) {
+          const q = list[i],
+            base =
+              (0.0042 + 0.004 * q.s.len + 0.0012 * Math.min(9, q.age)) * P.cal;
+          q.pipe += base * base;
+          q.r = Math.sqrt(q.pipe);
+          if (q.par) {
+            q.par.pipe += q.pipe * 0.91;
+            q.par.burden += q.burden * 0.83;
+          }
+        }
+        let height = 0,
+          spread = 0;
+        for (const q of list) {
+          q.a = q.par ? q.par.a.clone().lerp(q.par.b, q.s.at) : V();
+          q.dir = q.rest.clone();
+          if (q.par)
+            q.dir.addScaledVector(V().subVectors(q.par.dir, q.par.rest), 0.57);
+          const arm = Math.sqrt(Math.max(0.015, 1 - q.rest.y * q.rest.y));
+          const force =
+            (0.04 + 0.135 * Math.log1p(q.burden)) *
+            P.sag *
+            arm *
+            clamp(0.019 / q.r, 0.14, 1.6) *
+            clamp(q.s.len / 0.45, 0.25, 1.7);
+          q.dir.y -= Math.min(0.83, force);
+          q.dir.normalize();
+          q.b = q.a.clone().addScaledVector(q.dir, q.s.len);
+          q.mid = q.a.clone().lerp(q.b, 0.56);
+          height = Math.max(height, q.b.y);
+          spread = Math.max(spread, 2 * Math.hypot(q.b.x, q.b.z));
+          q.angle = q.par
+            ? Math.acos(clamp(q.dir.dot(q.par.dir), -1, 1)) / DEG
+            : 0;
+          const rad = Math.hypot(q.mid.x, q.mid.z);
+          q.inward =
+            rad > 0.24 && q.dir.x * q.mid.x + q.dir.z * q.mid.z < -0.19 * rad;
+          q.narrow = q.s.fork && q.angle < 30;
+          q.rival =
+            q.s.order > 0 &&
+            q.dir.y > 0.92 &&
+            q.s.len > 0.29 &&
+            rad < 0.38 * height;
+        }
+        const lights = seasonSuns.map((s) => exposures(list, s));
+        findCrossings(list);
+        let fruitCount = 0,
+          diam = 0,
+          kg = 0,
+          lightSum = 0,
+          live = 0,
+          lightWeight = 0,
+          defect = 0,
+          productive = 0,
+          goodZones = 0,
+          zones = 0,
+          headings = 0;
+        for (const q of list) {
+          q.light =
+            (lights[0][q.i] + 1.3 * lights[1][q.i] + lights[2][q.i]) / 3.3;
+          crop(q, t);
+          fruitCount += q.fruits.length;
+          diam += q.diameter;
+          for (const f of q.fruits)
+            kg += (Math.PI / 6) * f.d ** 3 * (P.sp === 'Cherry' ? 1000 : 880);
+          q.weak = !q.s.dead && !q.kids.length && q.age >= 2 && q.light < 0.4;
+          q.down = q.dir.y < -0.17;
+          q.bad = q.s.dead || q.weak || q.down || q.cross || q.inward;
+          const w = q.s.len * (q.s.order ? 1 : 0.42);
+          lightWeight += w;
+          lightSum += w * q.light;
+          live += q.s.dead ? 0 : q.s.len;
+          const flaws =
+            (q.bad ? 0.87 : 0) + (q.narrow ? 0.48 : 0) + (q.rival ? 0.5 : 0);
+          defect += w * Math.min(1.5, flaws);
+          if (q.s.head >= t.year - 1) headings += w;
+          if (q.potential) {
+            zones += q.potential;
+            goodZones += q.potential * q.light;
+            productive += q.potential * clamp((q.light - 0.2) / 0.58);
+          }
+          q.subLive = q.s.dead ? 0 : q.s.len;
+          q.subFruit = q.fruits.length;
+          q.subCount = 1;
+        }
+        for (let i = list.length - 1; i > 0; i--) {
+          const q = list[i];
+          q.par.subLive += q.subLive;
+          q.par.subFruit += q.subFruit;
+          q.par.subCount += q.subCount;
+        }
+        const avg = lightSum / Math.max(0.01, lightWeight),
+          health = zones ? goodZones / zones : avg;
+        const removal = t.removed / Math.max(0.01, t.base),
+          struct = clamp(1 - (2 * defect) / Math.max(0.01, lightWeight));
+        const cropIndex =
+          t.year < 3 ? 0.7 : clamp(productive / Math.max(1, live * 1.1));
+        const score = Math.round(
+          clamp(
+            17 +
+              31 * avg +
+              23 * struct +
+              18 * health +
+              10 * cropIndex -
+              115 * Math.max(0, removal - budget()) -
+              (24 * headings) / lightWeight,
+            0,
+            100,
+          ),
+        );
+        return {
+          list,
+          map,
+          height,
+          spread,
+          fruitCount,
+          diam: fruitCount ? (1000 * diam) / fruitCount : 0,
+          kg,
+          avg,
+          live,
+          health,
+          score,
+          struct,
+          productive,
+          removal,
+        };
+      }
+      function cone(d, angle, az) {
+        const u = V()
+            .crossVectors(Math.abs(d.y) > 0.91 ? V(1, 0, 0) : UP, d)
+            .normalize(),
+          v = V().crossVectors(d, u);
+        return d
+          .clone()
+          .multiplyScalar(Math.cos(angle))
+          .addScaledVector(u, Math.sin(angle) * Math.cos(az))
+          .addScaledVector(v, Math.sin(angle) * Math.sin(az))
+          .normalize();
+      }
+      function advance(t, m) {
+        const yr = t.year + 1,
+          r = mulberry32((t.seed ^ Math.imul(yr, 0x9e3779b1)) >>> 0);
+        const heavy = t.removed / Math.max(0.01, t.base) > budget();
+        const want = [];
+        let sprouts = 0;
+        const taper = clamp(1 - 0.048 * Math.max(0, yr - 4), 0.36, 1);
+        const capacity = Math.max(8, Math.round((7 + 1.35 * yr ** 1.56) * P.v));
+        function bid(q, at, d, role, order, fork, len, priority) {
+          want.push({
+            q,
+            at,
+            d,
+            role,
+            order,
+            fork,
+            len,
+            priority: priority + r() * 0.8,
+          });
+        }
+        const vase = P.mode === 'peach' || P.mode === 'tart';
+        const rooted = m.list[0],
+          rootAz = noise(t.seed, 0, 47) * TAU;
+        for (const q of m.list) {
+          const s = q.s;
+          s.load = q.fruits.length;
+          if (s.dead) continue;
+          if (q.age >= 2 && !q.kids.length && q.light < 0.34 && r() < 0.15) {
+            s.dead = true;
+            continue;
+          }
+          const leader = s.role === 'leader',
+            scaf = s.role === 'scaffold',
+            young = q.age === 0;
+          const released = s.release === t.year;
+          // Competing bud sinks share a finite whole-tree extension budget below.
+          // A remaining scaffold with a released union gets preferential flow.
+          const supply = clamp(
+            0.76 +
+              0.29 * q.light +
+              0.14 * (released ? 1 : 0) -
+              0.035 * Math.min(4, s.load),
+            0.63,
+            1.17,
+          );
+          const ext = 0.535 * P.v * taper * supply;
+          if (s.head === t.year) {
+            const count = 2 + Math.floor(r() * 2 * P.react);
+            for (let j = 0; j < count; j++) {
+              const a = rootAz + s.id * GOLD + j * GOLD,
+                tilt = 0.13 + r() * 0.34;
+              bid(
+                q,
+                0.79 + (0.19 * (j + 0.5)) / count,
+                V(tilt * Math.cos(a), 1, tilt * Math.sin(a)).normalize(),
+                'sprout',
+                s.order + 1,
+                true,
+                (0.43 + r() * 0.25) * P.v * clamp(taper + 0.22, 0.65, 1.1),
+                12,
+              );
+            }
+            continue;
+          }
+          if (!young && !released && q.age > 2) continue;
+          const ax = q.kids.some((k) => !k.s.fork && k.s.at > 0.95);
+          // Tip-bearing habits leave a larger share of lateral terminal buds floral.
+          const floral =
+            P.mode === 'tip'
+              ? 0.55
+              : P.mode === 'tart'
+                ? 0.34
+                : P.mode === 'mixed'
+                  ? 0.25
+                  : 0.13;
+          const mayExtend = young || released || (!q.kids.length && r() < 0.17);
+          if (
+            !ax &&
+            mayExtend &&
+            !(vase && q === rooted) &&
+            q.b.y < 5.9 &&
+            (leader || scaf || r() < (1 - floral) * (0.48 + 0.52 * q.light))
+          ) {
+            let d = q.dir.clone();
+            if (leader) d.lerp(UP, 0.69 * P.ap);
+            else if (scaf) {
+              const az = Math.atan2(d.z, d.x) + (r() - 0.5) * 0.33,
+                angle = (vase ? 38 : P.angle - 5) + (r() - 0.5) * 15;
+              d.lerp(
+                V(
+                  Math.sin(angle * DEG) * Math.cos(az),
+                  Math.cos(angle * DEG),
+                  Math.sin(angle * DEG) * Math.sin(az),
+                ),
+                0.52,
+              );
+            } else d = cone(d, (5 + r() * 16) * DEG, r() * TAU);
+            d.z -= 0.045 + (1 - q.light) * 0.085;
+            d.y += 0.035;
+            d.normalize();
+            bid(
+              q,
+              1,
+              d,
+              s.role,
+              s.order,
+              false,
+              ext *
+                (leader ? 1 : scaf ? (vase ? 1.22 : 1.04) : 0.69 + r() * 0.3) *
+                (0.94 + 0.12 * r()),
+              leader ? 9 : scaf ? 6 : 2.25 + q.light,
+            );
+          }
+          let sides = 0;
+          if (young) {
+            if (leader)
+              sides = q === rooted ? (vase ? 4 : 3) : r() < 0.55 ? 2 : 1;
+            else if (scaf) sides = 1 + (r() < 0.53 ? 1 : 0);
+            else
+              sides =
+                r() < (0.32 + q.light * 0.43) / (1 + 0.13 * s.order) ? 1 : 0;
+          } else if (released || (!ax && q.age <= 2 && r() < 0.16 * q.light))
+            sides = 1;
+          for (let j = 0; j < sides; j++) {
+            let at, d;
+            if (leader) {
+              const a =
+                rootAz +
+                (yr - 2) * GOLD +
+                (q === rooted ? (j * TAU) / sides : j * GOLD) +
+                (r() - 0.5) * 0.31;
+              const angle =
+                (P.angle + (r() - 0.5) * 20 - (r() < 0.09 ? 18 : 0)) * DEG;
+              d = V(
+                Math.cos(a) * Math.sin(angle),
+                Math.cos(angle),
+                Math.sin(a) * Math.sin(angle),
+              );
+              at =
+                (q === rooted ? 0.61 : 0.21) +
+                (j * (q === rooted ? 0.34 : 0.58)) / Math.max(1, sides - 1) +
+                0.025 * r();
+            } else {
+              at = 0.29 + (0.56 * (j + 0.25 + r() * 0.4)) / sides;
+              const angle = (r() < 0.12 ? 19 + r() * 12 : 39 + r() * 34) * DEG;
+              d = cone(q.dir, angle, r() * TAU);
+              d.y = Math.max(-0.31, d.y + 0.075);
+              d.z -= 0.08 * (1.12 - q.light);
+              d.normalize();
+            }
+            const role = leader ? 'scaffold' : 'side';
+            bid(
+              q,
+              clamp(at, 0.12, 0.97),
+              d,
+              role,
+              s.order + 1,
+              true,
+              ext *
+                (leader ? (vase ? 1.26 : 1.03) : 0.47 + 0.43 * r()) *
+                (0.91 + 0.16 * r()),
+              leader ? 5.4 : 1.55 + 0.82 * q.light,
+            );
+          }
+        }
+        if (heavy) {
+          const c = m.list
+            .filter(
+              (q) =>
+                !q.s.dead &&
+                q.age >= 1 &&
+                q.s.order <= 2 &&
+                q.s.head !== t.year,
+            )
+            .sort((a, b) => b.r - a.r);
+          const count = Math.min(
+            c.length,
+            Math.ceil((3 + yr * 0.38) * P.react),
+          );
+          for (let j = 0; j < count; j++) {
+            const q = c[j],
+              a = r() * TAU;
+            bid(
+              q,
+              0.36 + 0.57 * r(),
+              V(0.23 * Math.cos(a), 1, 0.23 * Math.sin(a)).normalize(),
+              'sprout',
+              q.s.order + 1,
+              true,
+              0.43 + 0.26 * r(),
+              11,
+            );
+          }
+        }
+        want.sort((a, b) => b.priority - a.priority);
+        const slots = Math.max(0, Math.min(C.max - t.edges.length, capacity));
+        const allocation = clamp(
+          capacity / Math.max(1, want.length),
+          0.77,
+          1.04,
+        );
+        for (let i = 0; i < Math.min(want.length, slots); i++) {
+          const w = want[i];
+          append(
+            t,
+            w.q.s.id,
+            w.at,
+            w.d,
+            w.len * (w.priority > 5 ? 1 : allocation),
+            w.role,
+            w.order,
+            w.fork,
+            yr,
+          );
+          if (w.role === 'sprout' && w.fork) sprouts++;
+        }
+        const load = m.fruitCount / Math.max(1, m.live);
+        t.stress =
+          P.mode === 'spur'
+            ? clamp((load - 0.78) * 0.63, 0, 0.82)
+            : clamp((load - 2.1) * 0.1, 0, 0.17);
+        t.year = yr;
+        t.removed = 0;
+        t.base = t.edges.reduce((a, s) => a + (s.dead ? 0 : s.len), 0);
+        return sprouts;
+      }
+
+      // Folded, pointed leaf blades in rosettes; no textures or alpha-card overdraw.
+      function leafGeometry() {
+        const pos = [],
+          col = [],
+          ind = [],
+          count = C.leaves;
+        for (let j = 0; j < count; j++) {
+          const a = j * GOLD,
+            dx = Math.cos(a),
+            dz = Math.sin(a),
+            length =
+              (P.sp === 'Peach' ? 0.121 : 0.091) * (1 - (0.16 * (j % 3)) / 2);
+          const width = length * (P.sp === 'Peach' ? 0.13 : 0.235),
+            rise = 0.013 + 0.012 * (j % 3);
+          const base = pos.length / 3,
+            y0 = 0.005 * j;
+          const pts = [
+            [0, 0, y0],
+            [length * 0.49, width, rise + y0],
+            [length * 0.52, 0, rise + 0.009 + y0],
+            [length * 0.52, -width, rise - 0.004 + y0],
+            [length, 0, y0 + rise * 0.3],
+          ];
+          for (let k = 0; k < 5; k++) {
+            const [l, w, y] = pts[k];
+            pos.push(dx * l - dz * w, y, dz * l + dx * w);
+            const f = 0.79 + 0.045 * ((k + j) % 5);
+            col.push(f * 0.97, f, f * 0.88);
+          }
+          for (const k of [0, 1, 2, 0, 2, 3, 1, 4, 2, 2, 4, 3])
+            ind.push(base + k);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        g.setIndex(ind);
+        g.computeVertexNormals();
+        return g;
+      }
+      function fruitGeometry() {
+        const pts = [],
+          apple = P.sp === 'Apple';
+        for (let i = 0; i <= 14; i++) {
+          const a = (i * Math.PI) / 14,
+            s = Math.sin(a),
+            y = -Math.cos(a);
+          const width =
+            s * (apple ? 1 + 0.13 * y : P.sp === 'Peach' ? 1 + 0.055 * y : 1);
+          pts.push(
+            new THREE.Vector2(
+              Math.max(0.0001, width),
+              y * (apple ? 0.88 : 1) -
+                (apple && y > 0 ? 0.15 * Math.exp(-s * s * 16) : 0) +
+                (apple && y < 0 ? 0.08 * Math.exp(-s * s * 18) : 0),
+            ),
+          );
+        }
+        const g = new THREE.LatheGeometry(pts, C.sides + 4),
+          p = g.attributes.position,
+          colors = [];
+        for (let i = 0; i < p.count; i++) {
+          const a = Math.atan2(p.getZ(i), p.getX(i)),
+            f = 0.88 + 0.12 * Math.cos(2 * a + 0.65 * p.getY(i));
+          colors.push(1, f, Math.max(0.69, f - 0.08));
+        }
+        g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        return g;
+      }
+      const barkMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const leafMat = new THREE.MeshLambertMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        side: THREE.DoubleSide,
+      });
+      const fruitMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.53,
+        metalness: 0,
+      });
+      const stemMat = new THREE.MeshLambertMaterial({ color: 0x67643b });
+      const cutMat = new THREE.MeshBasicMaterial({ color: 0xff7758 });
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xffd894,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const guideMat = new THREE.MeshBasicMaterial({
+        color: 0x277966,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const guideInner = new THREE.MeshBasicMaterial({
+        color: 0xdfffaf,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const ringG = new THREE.TorusGeometry(1, 0.105, 5, 30),
+        diskG = new THREE.CircleGeometry(1, 18);
+      const planeMat = new THREE.MeshBasicMaterial({
+        color: 0xffbb81,
+        side: THREE.DoubleSide,
+      });
+      let woodG, leafG, fruitG, wood, foliage, fruitMesh, stems, extra;
+      let pieces = [],
+        baseColors = new Float32Array(),
+        instant;
+      const obj = new THREE.Object3D(),
+        col = new THREE.Color(),
+        tmp = V();
+      const axisZ = V(0, 0, 1),
+        heatA = new THREE.Color(0x59569c),
+        heatB = new THREE.Color(0x83ad7d),
+        heatC = new THREE.Color(0xffdf6e);
+      const coral = new THREE.Color(0xff7258);
+      function disposeInstances() {
+        for (const m of [wood, foliage, fruitMesh, stems])
+          if (m) {
+            treeGroup.remove(m);
+            m.dispose();
+          }
+        if (extra) treeGroup.remove(extra);
+        wood = foliage = fruitMesh = stems = extra = null;
+      }
+      function resetGeometries() {
+        disposeInstances();
+        for (const g of [woodG, leafG, fruitG]) if (g) g.dispose();
+        woodG = new THREE.CylinderGeometry(0.72, 1, 1, C.sides, 1, false);
+        leafG = leafGeometry();
+        fruitG = fruitGeometry();
+        fruitMat.roughness =
+          P.sp === 'Cherry' ? 0.24 : P.sp === 'Peach' ? 0.83 : 0.46;
+      }
+      function instances(g, m, count) {
+        const mesh = new THREE.InstancedMesh(g, m, Math.max(1, count));
+        mesh.count = count;
+        treeGroup.add(mesh);
+        return mesh;
+      }
+      function stickMatrix(a, b, r, overlap = true) {
+        tmp.subVectors(b, a);
+        const len = Math.max(0.0001, tmp.length());
+        obj.position.copy(a).lerp(b, 0.5);
+        obj.quaternion.setFromUnitVectors(UP, tmp.multiplyScalar(1 / len));
+        obj.scale.set(
+          r,
+          len + (overlap ? Math.min(len * 0.22, r * 0.83) : 0),
+          r,
+        );
+        obj.updateMatrix();
+        return obj.matrix;
+      }
+      function atPoint(q, t) {
+        return q.a.clone().lerp(q.b, t);
+      }
+      function rebuild() {
+        disposeInstances();
+        pieces = [];
+        for (const q of M.list)
+          pieces.push({ q, a: q.a, b: q.b, r: q.r, main: true, at: 0 });
+        for (const q of M.list)
+          for (const b of q.buds) {
+            if (pieces.length >= C.max) break;
+            const a = atPoint(q, b.at),
+              d = V(Math.cos(b.az), 0.58, Math.sin(b.az)).normalize();
+            pieces.push({
+              q,
+              a,
+              b: a.clone().addScaledVector(d, q.r + 0.025 + b.len * 0.5),
+              r: Math.min(0.008, q.r * 0.52),
+              main: false,
+              at: b.at,
+            });
+          }
+        wood = instances(woodG, barkMat, pieces.length);
+        baseColors = new Float32Array(pieces.length * 3);
+        for (let i = 0; i < pieces.length; i++) {
+          const p = pieces[i];
+          wood.setMatrixAt(i, stickMatrix(p.a, p.b, p.r));
+        }
+        wood.instanceMatrix.needsUpdate = true;
+        wood.computeBoundingSphere();
+        // Choose clusters uniformly across shoot wood if the GPU budget is full.
+        const sites = [];
+        let requested = 0;
+        for (const q of M.list) {
+          if (q.s.dead) continue;
+          const k = Math.max(
+            0,
+            Math.round(
+              C.density *
+                (q.age <= 1
+                  ? 3 + q.s.len * 13
+                  : q.age <= 4
+                    ? 1 + q.s.len * 5
+                    : q.buds.length * 0.7),
+            ),
+          );
+          for (let j = 0; j < k; j++) {
+            requested++;
+            const item = [q, j, k];
+            if (sites.length < C.clusters) sites.push(item);
+            else {
+              const idx = Math.floor(
+                noise(T.seed, q.s.id, 570 + j) * requested,
+              );
+              if (idx < C.clusters) sites[idx] = item;
+            }
+          }
+        }
+        foliage = instances(leafG, leafMat, sites.length);
+        const leafHue =
+          P.sp === 'Peach' ? 0.263 : P.sp === 'Cherry' ? 0.302 : 0.252;
+        for (let i = 0; i < sites.length; i++) {
+          const [q, j, k] = sites[i],
+            r = (s) => n(q, 600 + j * 8 + s);
+          const station =
+            q.age > 2 && q.buds.length
+              ? q.buds[j % q.buds.length].at
+              : clamp((j + 0.25 + 0.48 * r(0)) / k);
+          const az =
+            (q.buds.length && q.age > 2
+              ? q.buds[j % q.buds.length].az
+              : j * GOLD + TAU * n(q, 541)) +
+            0.55 * r(1);
+          const off = q.r + (q.age > 1 ? 0.029 : 0.015);
+          obj.position.copy(q.a).lerp(q.b, station);
+          obj.position.x += off * Math.cos(az);
+          obj.position.z += off * Math.sin(az);
+          obj.rotation.set((r(2) - 0.5) * 1.65, az, (r(3) - 0.5) * 1.5);
+          obj.scale.setScalar((0.78 + 0.41 * r(4)) * (0.84 + q.light * 0.23));
+          obj.updateMatrix();
+          foliage.setMatrixAt(i, obj.matrix);
+          col.setHSL(
+            leafHue + (r(5) - 0.5) * 0.053,
+            0.37 + 0.17 * r(6),
+            0.19 + 0.108 * r(7) + 0.063 * q.light,
+            THREE.SRGBColorSpace,
+          );
+          foliage.setColorAt(i, col);
+        }
+        foliage.visible = showLeaves;
+        foliage.computeBoundingSphere();
+        fruitMesh = instances(fruitG, fruitMat, M.fruitCount);
+        stems = instances(woodG, stemMat, M.fruitCount);
+        let ix = 0;
+        for (const q of M.list)
+          for (const f of q.fruits) {
+            const rad = f.d * 0.5,
+              ch = P.sp === 'Cherry',
+              pe = P.sp === 'Peach';
+            const anchor = atPoint(q, f.at),
+              side = V(Math.cos(f.az), 0, Math.sin(f.az));
+            anchor.addScaledVector(side, q.r * 0.8 + (f.spur ? 0.03 : 0));
+            anchor.y += f.spur ? 0.019 : 0;
+            const end = anchor
+              .clone()
+              .addScaledVector(side, (ch ? 0.023 : rad * 0.68) + 0.009);
+            end.y -= ch ? 0.039 + 0.018 * f.shade : 0.014;
+            stems.setMatrixAt(
+              ix,
+              stickMatrix(anchor, end, ch ? 0.00155 : 0.0021, false),
+            );
+            obj.position.copy(end);
+            obj.position.y -= rad * (ch ? 0.92 : pe ? 0.95 : 0.73);
+            obj.rotation.set(0.08 * Math.cos(f.az), f.az, 0.1 * Math.sin(f.az));
+            obj.scale.set(rad, rad, rad);
+            obj.updateMatrix();
+            fruitMesh.setMatrixAt(ix, obj.matrix);
+            if (ch)
+              col.setHSL(
+                0.987 + 0.012 * f.shade,
+                0.72,
+                0.17 + 0.19 * f.ex + (P.mode === 'tart' ? 0.056 : 0),
+                THREE.SRGBColorSpace,
+              );
+            else if (pe)
+              col.setHSL(
+                0.046 + 0.064 * f.shade,
+                0.86,
+                0.53 + 0.084 * f.ex,
+                THREE.SRGBColorSpace,
+              );
+            else if (P.mode === 'tip')
+              col.setHSL(
+                0.196 + 0.039 * f.shade,
+                0.54,
+                0.38 + 0.092 * f.ex,
+                THREE.SRGBColorSpace,
+              );
+            else if (P.mode === 'mixed' && f.shade < 0.57)
+              col.setHSL(
+                0.1 + 0.036 * f.shade,
+                0.52,
+                0.38 + 0.083 * f.ex,
+                THREE.SRGBColorSpace,
+              );
+            else
+              col.setHSL(
+                0.009 + 0.052 * (1 - f.ex) + 0.014 * f.shade,
+                0.6 + 0.16 * f.ex,
+                0.34 + 0.113 * f.ex,
+                THREE.SRGBColorSpace,
+              );
+            fruitMesh.setColorAt(ix++, col);
+          }
+        fruitMesh.visible = stems.visible = showFruit;
+        fruitMesh.computeBoundingSphere();
+        stems.computeBoundingSphere();
+        contact.scale.setScalar(Math.max(0.85, M.spread * 1.1));
+        updateExposure();
+        updateSun();
+        recommend();
+        hud();
+        invalidate();
+      }
+      function updateExposure() {
+        instant = exposures(M.list, sunDir(hour));
+        let avg = 0;
+        for (const x of instant) avg += x;
+        $('lightReading').textContent = '· mean ' + pct(avg / instant.length);
+        for (let i = 0; i < pieces.length; i++) {
+          const { q, main } = pieces[i],
+            e = instant[q.i];
+          if (overlay) {
+            if (e < 0.48) col.copy(heatA).lerp(heatB, e / 0.48);
+            else col.copy(heatB).lerp(heatC, (e - 0.48) / 0.52);
+          } else if (q.s.dead) col.setHex(0x817f71);
+          else if (!main) col.setHex(0x796240);
+          else
+            col.setHSL(
+              0.063 + 0.014 * n(q, 90),
+              0.26 + 0.15 * Math.min(1, q.age / 4),
+              0.254 + 0.085 * n(q, 91) + 0.04 * (q.age === 0),
+              THREE.SRGBColorSpace,
+            );
+          col.toArray(baseColors, i * 3);
+        }
+        paintWood();
+      }
+      function removedPiece(p) {
+        return (
+          selected &&
+          (selected.ids.has(p.q.s.id) ||
+            (selected.id === p.q.s.id && !p.main && p.at >= selected.at))
+        );
+      }
+      function paintWood() {
+        if (!wood) return;
+        if (extra) {
+          treeGroup.remove(extra);
+          extra = null;
+        }
+        for (let i = 0; i < pieces.length; i++) {
+          const p = pieces[i];
+          col.fromArray(baseColors, i * 3);
+          if (removedPiece(p)) col.copy(coral);
+          wood.setColorAt(i, col);
+          // Restore original transforms even when cancelling a partial-shoot cut.
+          if (p.main) {
+            let end = p.b;
+            if (selected && p.q.s.id === selected.id && selected.at > 0) {
+              end = atPoint(p.q, selected.at);
+              extra = new THREE.Mesh(woodG, cutMat);
+              extra.matrixAutoUpdate = false;
+              extra.matrix.copy(
+                stickMatrix(end, p.b, p.r * (1 - 0.28 * selected.at)),
+              );
+              treeGroup.add(extra);
+            }
+            wood.setMatrixAt(i, stickMatrix(p.a, end, p.r));
+          }
+        }
+        wood.instanceColor.needsUpdate = true;
+        wood.instanceMatrix.needsUpdate = true;
+        invalidate();
+      }
+      function mark(q, t, primary) {
+        const p = atPoint(q, t),
+          r = Math.max(q.r * 1.75, clamp(M.height * 0.018, 0.029, 0.11));
+        const ring = new THREE.Mesh(ringG, primary ? ringMat : guideMat);
+        ring.position.copy(p);
+        ring.scale.setScalar(primary ? r * 1.22 : r);
+        ring.renderOrder = primary ? 9 : 6;
+        markers.add(ring);
+        billboards.push(ring);
+        if (primary) {
+          const disk = new THREE.Mesh(diskG, planeMat);
+          disk.position.copy(p);
+          disk.scale.setScalar(q.r * 1.32);
+          disk.quaternion.setFromUnitVectors(axisZ, q.dir);
+          markers.add(disk);
+        } else {
+          const inner = new THREE.Mesh(ringG, guideInner);
+          inner.scale.setScalar(ring.scale.x * 0.72);
+          inner.position.copy(p);
+          inner.renderOrder = 7;
+          markers.add(inner);
+          billboards.push(inner);
+        }
+      }
+      function drawMarkers() {
+        markers.clear();
+        billboards = [];
+        if (learning)
+          for (const r of recs)
+            if (!selected || !selected.ids.has(r.q.s.id)) mark(r.q, 0, false);
+        if (selected) mark(M.map.get(selected.id), selected.at, true);
+        invalidate();
+      }
+
+      function stage() {
+        return clamp(1 + T.year - renovationStart, 1, 3);
+      }
+      function guideText() {
+        const fit =
+          system === P.sys
+            ? 'A natural match for this habit.'
+            : system === 'renovate'
+              ? 'Spread correction over several seasons.'
+              : 'An alternative form; do not force it with large cuts.';
+        const text =
+          system === 'leader'
+            ? 'Keep one leader, stagger wide scaffolds and taper the upper crown.'
+            : system === 'vase'
+              ? 'Build a sunny bowl around three or four outward primary limbs.'
+              : `Renovation ${stage()}/3: ${['remove 3Ds first; leave major height changes for later', 'thin crowding and competing uprights in stages', 'renew aging fruiting zones and reassess height'][stage() - 1]}.`;
+        return fit + ' ' + text + ' ' + P.food;
+      }
+      function recommendation(q) {
+        if (
+          !q.par ||
+          (!q.s.fork && !q.s.dead && !q.bad) ||
+          q.subLive / M.live > 0.19
+        )
+          return null;
+        if ((T.removed + q.subLive) / T.base > budget()) return null;
+        let weight = 0,
+          reason = '';
+        const add = (x, msg) => {
+          if (x > 0) {
+            if (x > best) {
+              best = x;
+              reason = msg;
+            }
+            weight += x;
+          }
+        };
+        let best = 0;
+        add(q.s.dead ? 12 : 0, 'Remove dead wood back at its union.');
+        add(
+          q.weak ? 6 : 0,
+          'This weak, shaded shoot has little productive extension.',
+        );
+        add(q.cross ? 7 : 0, 'These intersecting shoot paths risk rubbing.');
+        add(q.inward ? 4 : 0, 'This inward shoot crowds the interior.');
+        add(q.down ? 4.6 : 0, 'Thin the low, downward-growing limb.');
+        add(
+          q.narrow ? 3.8 : 0,
+          'A narrow V union competes with wider scaffold attachments.',
+        );
+        add(
+          q.s.role === 'sprout' ? 5 : 0,
+          'Thin a vigorous upright instead of heading it again.',
+        );
+        if (system === 'leader') {
+          if (q.s.role === 'leader') return null;
+          add(
+            q.rival ? 7 : 0,
+            'Remove an upright competitor and keep one dominant leader.',
+          );
+          add(
+            q.mid.y > M.height * 0.65 && q.light < 0.53 ? 3 : 0,
+            'Thin crowded upper wood to keep the spindle tapered.',
+          );
+        } else if (system === 'vase') {
+          add(
+            q.rival || (q.inward && q.b.y > 0.45 * M.height) ? 6 : 0,
+            'Open the central bowl to light for lower fruiting shoots.',
+          );
+          if (q.s.role === 'scaffold' && q.par.s.role === 'leader') weight -= 5;
+        } else {
+          if (stage() === 1 && q.bad) weight += 3;
+          if (stage() === 2)
+            add(
+              q.rival || q.cross ? 4 : 0,
+              'Relieve one congested upper zone this season.',
+            );
+          if (stage() === 3)
+            add(
+              q.age >= 4 && q.light < 0.56 ? 4 : 0,
+              'Renew this aging, shaded fruiting zone in stages.',
+            );
+        }
+        weight -=
+          (4 * q.subFruit) / Math.max(1, M.fruitCount) +
+          (3 * q.subLive) / M.live;
+        if (P.sp === 'Peach' && q.age === 1 && q.light > 0.65) weight -= 2;
+        if (q.angle >= 45 && q.angle <= 60 && !q.bad && q.s.role === 'scaffold')
+          weight -= 2;
+        return weight > 1.15 ? { q, weight, reason } : null;
+      }
+      function related(a, b) {
+        for (let p = a; p; p = p.par) if (p === b) return true;
+        for (let p = b; p; p = p.par) if (p === a) return true;
+        return false;
+      }
+      function recommend() {
+        recs = [];
+        if (learning) {
+          const pool = M.list
+            .map(recommendation)
+            .filter(Boolean)
+            .sort((a, b) => b.weight - a.weight);
+          for (const r of pool) {
+            if (recs.every((k) => !related(k.q, r.q))) recs.push(r);
+            if (recs.length === 3) break;
+          }
+        }
+        $('systemNote').textContent = guideText();
+        const el = $('recList');
+        el.replaceChildren();
+        if (learning) {
+          if (!recs.length) {
+            const tip = document.createElement('small');
+            tip.textContent =
+              'No priority thinning cuts within this year’s budget. Retaining wood is a valid choice.';
+            el.append(tip);
+          }
+          recs.forEach((r, i) => {
+            const b = document.createElement('button');
+            b.textContent = `◎ ${i + 1} · ${r.reason}`;
+            b.onclick = () => propose(r.q, 0, r.reason);
+            el.append(b);
+          });
+        }
+        drawMarkers();
+      }
+
+      // Make a non-mutating hypothetical graph. Only children attached above
+      // a heading cut are lost; lower attachments are reparameterized in place.
+      function cutPlan(q, at) {
+        const ids = new Set(),
+          stack = at === 0 ? [q] : q.kids.filter((k) => k.s.at >= at);
+        while (stack.length) {
+          const k = stack.pop();
+          ids.add(k.s.id);
+          for (const c of k.kids) stack.push(c);
+        }
+        const edges = [],
+          originals = [],
+          lost = [];
+        let length = 0;
+        for (const s of T.edges) {
+          if (ids.has(s.id)) {
+            lost.push(s);
+            if (!s.dead) length += s.len;
+            continue;
+          }
+          let next = s;
+          if (s.id === q.s.id && at > 0) {
+            if (!s.dead) length += s.len * (1 - at);
+            next = { ...s, len: s.len * at, head: T.year, load: s.load * at };
+          } else if (at > 0 && s.p === q.s.id) next = { ...s, at: s.at / at };
+          else if (at === 0 && s.id === q.s.p) next = { ...s, release: T.year };
+          if (next !== s) originals.push(s);
+          edges.push(next);
+        }
+        const after = { ...T, edges, removed: T.removed + length },
+          model = derive(after);
+        return { id: q.s.id, at, ids, length, lost, originals, after, model };
+      }
+      function assess(q, c) {
+        const thin = c.at === 0,
+          a = c.model,
+          frac = a.removal;
+        // Compare the same surviving sites, not the means of two different sets.
+        let lg = 0,
+          w = 0;
+        for (const k of a.list) {
+          const old = M.map.get(k.s.id);
+          lg += (k.light - old.light) * k.s.len;
+          w += k.s.len;
+        }
+        lg /= Math.max(0.01, w);
+        const opened = lg > 0.00005;
+        const light = Math.round(
+          clamp(lg * 830 + (thin && opened ? 2 : 0), -9, 16),
+        );
+        let structure = thin ? 3 : -9;
+        if (thin && (q.narrow || q.rival)) structure += 8;
+        if (thin && q.s.role === 'sprout') structure += 5;
+        if (q.s.role === 'leader' && system === 'leader') structure -= 18;
+        if (
+          q.s.role === 'scaffold' &&
+          q.s.fork &&
+          q.angle >= 43 &&
+          q.angle <= 63 &&
+          !q.bad
+        )
+          structure -= 9;
+        if (!thin && P.sp !== 'Apple') structure -= 7;
+        const damaged =
+          c.lost.reduce((v, s) => v + (M.map.get(s.id).bad ? s.len : 0), 0) +
+          (q.bad && c.at ? q.s.len * (1 - c.at) : 0);
+        const ds = Math.round(
+          clamp(
+            damaged /
+              Math.max(
+                0.02,
+                c.lost.reduce((x, s) => x + s.len, 0) +
+                  (c.at ? q.s.len * (1 - c.at) : 0),
+              ),
+          ) * 15,
+        );
+        const fruitLoss =
+          (M.fruitCount - a.fruitCount) / Math.max(1, M.fruitCount);
+        const zoneLoss =
+          Math.max(0, M.productive - a.productive) / Math.max(1, M.productive);
+        let balance = Math.round(
+          5 -
+            42 * Math.max(0, fruitLoss) -
+            22 * zoneLoss -
+            (22 * c.length) / T.base -
+            150 * Math.max(0, frac - budget()),
+        );
+        if (!thin && (P.mode === 'tip' || P.mode === 'peach') && q.age <= 1)
+          balance -= 6;
+        const pts = [light, structure, balance, ds],
+          score = clamp(58 + pts.reduce((x, y) => x + y, 0), 0, 100);
+        return { pts, score, delta: a.score - M.score, lg };
+      }
+      const partNames = [
+        'Light gain',
+        'Structure / angles',
+        'Canopy balance',
+        '3Ds removed',
+      ];
+      function propose(q, at, reason = '') {
+        if (!q || !q.par) {
+          notice('The rooted stem is protected. Select a scaffold or shoot.');
+          return;
+        }
+        closeTab();
+        const c = cutPlan(q, at);
+        c.grade = assess(q, c);
+        selected = c;
+        paintWood();
+        drawMarkers();
+        $('cutTitle').textContent = at
+          ? 'Heading · shorten shoot'
+          : 'Thinning · branch collar';
+        $('cutScore').textContent = c.grade.score + '/100 cut';
+        $('why').textContent =
+          (reason
+            ? reason + ' '
+            : at
+              ? P.sp === 'Apple'
+                ? 'Heading trades terminal growth for upright regrowth. '
+                : 'Heading stone fruit costs renewal wood and provokes upright regrowth. '
+              : 'A collar cut redirects growth to retained limbs. ') +
+          `${pct(c.model.removal)} of live length removed this year if confirmed (guide ${pct(budget())}). Canopy ${M.score} → ${c.model.score}.`;
+        const box = $('parts');
+        box.replaceChildren();
+        partNames.forEach((label, i) => {
+          const s = document.createElement('span');
+          s.textContent = label + ' ' + signed(c.grade.pts[i]);
+          box.append(s);
+        });
+        $('preview').hidden = false;
+        viewport();
+      }
+      function cancelCut() {
+        if (!selected) return;
+        selected = null;
+        $('preview').hidden = true;
+        paintWood();
+        drawMarkers();
+        viewport();
+      }
+      function confirmCut() {
+        if (!selected) return;
+        const c = selected;
+        undoLog.push({
+          removed: T.removed,
+          originals: c.originals,
+          lost: c.lost,
+        });
+        T = c.after;
+        M = c.model;
+        selected = null;
+        $('preview').hidden = true;
+        rebuild();
+        viewport();
+        notice(
+          `Cut ${c.grade.score}/100 · canopy ${signed(c.grade.delta)} → ${M.score}. ` +
+            partNames
+              .map((s, i) => s + ' ' + signed(c.grade.pts[i]))
+              .join(' · '),
+          7800,
+        );
+      }
+      function undoCut() {
+        if (!undoLog.length) return;
+        cancelCut();
+        const u = undoLog.pop(),
+          map = new Map(u.originals.map((s) => [s.id, s]));
+        T.edges = T.edges
+          .map((s) => map.get(s.id) || s)
+          .concat(u.lost)
+          .sort((a, b) => a.id - b.id);
+        T.removed = u.removed;
+        M = derive(T);
+        rebuild();
+        notice(
+          'Cut undone. The preceding wood, crop and canopy score are restored.',
+        );
+      }
+
+      // Screen-space segment capsules complement exact instanced-frustum hits.
+      const raycaster = new THREE.Raycaster(),
+        ndc = new THREE.Vector2(),
+        pa = V(),
+        pb = V();
+      function screenPoint(p, out, w, h) {
+        out.copy(p).project(camera);
+        out.x = (out.x + 1) * w * 0.5;
+        out.y = (1 - out.y) * h * 0.5;
+        return out;
+      }
+      function pick(ev) {
+        const rect = canvas.getBoundingClientRect(),
+          w = rect.width,
+          h = rect.height,
+          x = ev.clientX - rect.left,
+          y = ev.clientY - rect.top;
+        const slack = ev.pointerType === 'mouse' ? 12 : 24;
+        camera.updateMatrixWorld();
+        treeGroup.updateMatrixWorld(true);
+        if (learning) {
+          let hit = null,
+            min = slack * 0.75;
+          for (const rec of recs) {
+            screenPoint(rec.q.a, pa, w, h);
+            const dist = Math.hypot(pa.x - x, pa.y - y);
+            if (pa.z >= -1 && pa.z < 1 && dist < min) {
+              min = dist;
+              hit = rec;
+            }
+          }
+          if (hit) {
+            propose(hit.q, 0, hit.reason);
+            return;
+          }
+        }
+        ndc.set((2 * x) / w - 1, 1 - (2 * y) / h);
+        raycaster.setFromCamera(ndc, camera);
+        const hits = raycaster.intersectObject(wood, false);
+        let q = null,
+          t = 0,
+          best = Infinity;
+        if (hits.length) {
+          const p = pieces[hits[0].instanceId];
+          q = p.q;
+          t = p.main
+            ? clamp(tmp.subVectors(hits[0].point, q.a).dot(q.dir) / q.s.len)
+            : p.at;
+        } else {
+          for (const k of M.list) {
+            screenPoint(k.a, pa, w, h);
+            screenPoint(k.b, pb, w, h);
+            if (pa.z < -1 || pa.z >= 1 || pb.z < -1 || pb.z >= 1) continue;
+            const dx = pb.x - pa.x,
+              dy = pb.y - pa.y,
+              st = clamp(
+                ((x - pa.x) * dx + (y - pa.y) * dy) /
+                  Math.max(0.001, dx * dx + dy * dy),
+              );
+            const dist = Math.hypot(pa.x + st * dx - x, pa.y + st * dy - y);
+            const rank = dist + 0.095 * camera.position.distanceTo(k.mid);
+            if (dist <= slack && rank < best) {
+              best = rank;
+              q = k;
+              t = st;
+            }
+          }
+        }
+        if (!q) return;
+        if (t <= 0.25 && q.par) {
+          propose(q, 0);
+          return;
+        }
+        // Snap to the nearest side union along the picked piece. At its distal
+        // fork a continuation can also be removed cleanly at the junction.
+        let collar = null,
+          delta = 0.25001;
+        for (const k of q.kids) {
+          if (!k.s.fork && q.kids.length < 2) continue;
+          const diff = Math.abs(k.s.at - t);
+          if (diff < delta) {
+            delta = diff;
+            collar = k;
+          }
+        }
+        if (collar) {
+          propose(collar, 0);
+          return;
+        }
+        propose(q, clamp(t, 0.04, 0.985));
+      }
+      const pointers = new Set();
+      let tap = null;
+      canvas.addEventListener(
+        'pointerdown',
+        (e) => {
+          pointers.add(e.pointerId);
+          tap =
+            pointers.size === 1 &&
+            e.button === 0 &&
+            !e.shiftKey &&
+            !e.ctrlKey &&
+            !e.metaKey
+              ? { id: e.pointerId, x: e.clientX, y: e.clientY }
+              : null;
+        },
+        true,
+      );
+      canvas.addEventListener(
+        'pointermove',
+        (e) => {
+          if (
+            tap &&
+            tap.id === e.pointerId &&
+            Math.hypot(e.clientX - tap.x, e.clientY - tap.y) >
+              (e.pointerType === 'mouse' ? 4 : 8)
+          )
+            tap = null;
+        },
+        true,
+      );
+      canvas.addEventListener(
+        'pointerup',
+        (e) => {
+          const ok = tap && tap.id === e.pointerId && pointers.size === 1;
+          pointers.delete(e.pointerId);
+          tap = null;
+          if (ok && M) pick(e);
+        },
+        true,
+      );
+      for (const type of ['pointercancel', 'lostpointercapture'])
+        canvas.addEventListener(
+          type,
+          (e) => {
+            pointers.delete(e.pointerId);
+            tap = null;
+          },
+          true,
+        );
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      let noticeTimer;
+      function notice(s, ms = 5000) {
+        const box = $('notice');
+        box.textContent = s;
+        box.hidden = false;
+        clearTimeout(noticeTimer);
+        noticeTimer = setTimeout(() => (box.hidden = true), ms);
+      }
+      function hud() {
+        $('year').textContent = 'Year ' + T.year;
+        $('habit').textContent = P.sp + ' · ' + P.name;
+        $('stats').textContent =
+          `${M.height.toFixed(1)} m · ${M.fruitCount} fruit · canopy ${M.score}/100 · pruned ${pct(M.removal)}`;
+        $('undo').disabled = !undoLog.length;
+        $('hint').textContent = learning
+          ? 'Mint rings · suggested collars'
+          : 'Tap wood to inspect a cut';
+      }
+      function setTab(key) {
+        tab = key;
+        for (const b of document.querySelectorAll('[data-tab]')) {
+          const on = b.dataset.tab === tab;
+          $(b.dataset.tab).hidden = !on;
+          b.setAttribute('aria-expanded', on);
+        }
+        viewport();
+      }
+      function closeTab() {
+        setTab('');
+      }
+      document.querySelectorAll('[data-tab]').forEach(
+        (b) =>
+          (b.onclick = () => {
+            cancelCut();
+            setTab(tab === b.dataset.tab ? '' : b.dataset.tab);
+          }),
+      );
+      function pressed(id, on, label) {
+        $(id).setAttribute('aria-pressed', String(on));
+        if (label) $(id).textContent = label;
+      }
+      function fillCultivars(index) {
+        const sel = $('cultivar');
+        sel.replaceChildren();
+        profiles.forEach((p, i) => {
+          if (p.sp === $('species').value)
+            sel.add(new Option(p.name, String(i)));
+        });
+        if (index !== undefined) sel.value = String(index);
+      }
+      for (let i = 1; i <= 15; i++)
+        $('startYear').add(new Option('Year ' + i, i));
+      $('startYear').value = '5';
+      $('detail').value = matchMedia('(pointer:coarse)').matches
+        ? 'low'
+        : 'medium';
+      $('species').onchange = () => fillCultivars();
+      fillCultivars(0);
+      function writeConfig(c) {
+        $('species').value = profiles[c.profile].sp;
+        fillCultivars(c.profile);
+        $('startYear').value = c.start;
+        $('seed').value = c.seed;
+        $('detail').value = c.detail;
+      }
+      function readConfig() {
+        return {
+          profile: +$('cultivar').value,
+          start: clamp(+$('startYear').value, 1, 15),
+          seed: Math.trunc(Number($('seed').value) || 0) >>> 0,
+          detail: $('detail').value,
+        };
+      }
+      function plant(c, announce = true) {
+        selected = null;
+        $('preview').hidden = true;
+        undoLog = [];
+        config = { ...c };
+        P = profiles[c.profile];
+        C = caps[c.detail];
+        T = fresh(c.seed);
+        T.base = T.edges[0].len;
+        system = P.sys;
+        $('system').value = system;
+        renovationStart = c.start;
+        writeConfig(c);
+        for (let i = 1; i < c.start; i++) advance(T, derive(T));
+        M = derive(T);
+        T.base = M.live;
+        resetGeometries();
+        renderer.setPixelRatio(Math.min(devicePixelRatio || 1, C.dpr));
+        closeTab();
+        rebuild();
+        viewport();
+        fitTree();
+        if (announce)
+          notice(
+            `Planted ${P.sp.toLowerCase()} · seed ${c.seed} · year ${T.year}. ${P.food}`,
+          );
+      }
+      $('plant').onclick = () => plant(readConfig());
+      $('reset').onclick = () => plant(config);
+      $('random').onclick = () => {
+        const v = new Uint32Array(1);
+        if (globalThis.crypto?.getRandomValues) crypto.getRandomValues(v);
+        else v[0] = (Math.random() * 4294967296) >>> 0;
+        $('seed').value = v[0];
+        plant(readConfig());
+      };
+      $('next').onclick = () => {
+        cancelCut();
+        closeTab();
+        const harvest = M,
+          year = T.year;
+        const spr = advance(T, M);
+        undoLog = [];
+        M = derive(T);
+        rebuild();
+        fitTree();
+        const zone =
+          P.mode === 'peach' || P.mode === 'tip'
+            ? 'renewal wood'
+            : 'fruiting zones';
+        notice(
+          `Y${year} harvest · ${harvest.fruitCount} fruit, ${harvest.kg.toFixed(1)} kg` +
+            (harvest.fruitCount
+              ? `, mean ${Math.round(harvest.diam)} mm.`
+              : '.') +
+            ` Y${T.year} ${zone}: ${M.productive < 0.1 ? 'developing' : M.health > 0.62 ? 'well lit' : M.health > 0.45 ? 'mixed light' : 'shaded'}. ` +
+            (spr
+              ? `${spr} new watersprouts after pruning.`
+              : 'No watersprout surge.') +
+            (T.edges.length >= C.max ? ' Segment cap reached.' : '') +
+            (T.stress > 0.4 ? ' Heavy crop reduced return bloom.' : ''),
+          9500,
+        );
+      };
+      $('undo').onclick = undoCut;
+      $('cancel').onclick = cancelCut;
+      $('confirm').onclick = confirmCut;
+      $('leaves').onclick = () => {
+        showLeaves = !showLeaves;
+        foliage.visible = showLeaves;
+        pressed(
+          'leaves',
+          showLeaves,
+          'Foliage: ' + (showLeaves ? 'On' : 'Off'),
+        );
+        invalidate();
+      };
+      $('fruit').onclick = () => {
+        showFruit = !showFruit;
+        fruitMesh.visible = stems.visible = showFruit;
+        pressed('fruit', showFruit, 'Fruit: ' + (showFruit ? 'On' : 'Off'));
+        invalidate();
+      };
+      $('heat').onclick = () => {
+        overlay = !overlay;
+        pressed('heat', overlay);
+        updateExposure();
+        invalidate();
+      };
+      $('rays').onclick = () => {
+        guideSun = !guideSun;
+        pressed('rays', guideSun);
+        updateSun();
+      };
+      function setTime(v) {
+        hour = +v;
+        $('time').value = hour;
+        updateSun();
+        updateExposure();
+      }
+      $('time').oninput = (e) => setTime(e.target.value);
+      document
+        .querySelectorAll('[data-time]')
+        .forEach((b) => (b.onclick = () => setTime(b.dataset.time)));
+      $('learn').onclick = () => {
+        learning = !learning;
+        pressed('learn', learning, 'Learn mode: ' + (learning ? 'On' : 'Off'));
+        recommend();
+        hud();
+      };
+      $('system').onchange = (e) => {
+        system = e.target.value;
+        if (system === 'renovate') renovationStart = T.year;
+        learning = true;
+        pressed('learn', true, 'Learn mode: On');
+        recommend();
+        hud();
+      };
+      $('pan').onclick = () => {
+        panOnly = !panOnly;
+        controls.touches.ONE = panOnly ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+        controls.mouseButtons.LEFT = panOnly
+          ? THREE.MOUSE.PAN
+          : THREE.MOUSE.ROTATE;
+        pressed('pan', panOnly, 'One finger: ' + (panOnly ? 'Pan' : 'Orbit'));
+      };
+      $('fit').onclick = fitTree;
+      let fallback = false;
+      function fullLabel() {
+        pressed(
+          'full',
+          !!document.fullscreenElement || fallback,
+          document.fullscreenElement || fallback ? 'Exit full' : 'Fullscreen',
+        );
+        viewport();
+      }
+      $('full').onclick = async () => {
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+            return;
+          }
+          if (fallback) {
+            fallback = false;
+            $('app').classList.remove('expanded');
+            fullLabel();
+            return;
+          }
+          if (!$('app').requestFullscreen) throw new Error('Unavailable');
+          await $('app').requestFullscreen();
+        } catch {
+          fallback = true;
+          $('app').classList.add('expanded');
+          notice(
+            'Viewport fill is active. This browser or frame restricts system fullscreen.',
+          );
+        }
+        fullLabel();
+      };
+      document.addEventListener('fullscreenchange', fullLabel);
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (selected) cancelCut();
+          else closeTab();
+          if (fallback) {
+            fallback = false;
+            $('app').classList.remove('expanded');
+            fullLabel();
+          }
+        }
+      });
+      for (const [id, on] of [
+        ['leaves', true],
+        ['fruit', true],
+        ['learn', false],
+        ['rays', false],
+        ['heat', false],
+        ['pan', false],
+      ])
+        pressed(id, on);
+      plant(readConfig(), false);
+    </script>
+  </body>
+</html>
