@@ -3,7 +3,9 @@ import { minify } from 'html-minifier-terser';
 
 const sources = (await readdir('src')).filter((f) => f.endsWith('.html'));
 if (sources.length !== 1) {
-  console.error(`build: expected exactly one src/*.html, found ${sources.length}`);
+  console.error(
+    `build: expected exactly one src/*.html, found ${sources.length}`,
+  );
   process.exit(1);
 }
 
