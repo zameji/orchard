@@ -1766,12 +1766,10 @@
       let woodG, leafG, fruitG, wood, foliage, fruitMesh, stems, extra;
       let pieces = [],
         baseColors = new Float32Array(),
-        instant,
-        leafCapHit = false;
+        instant;
       const obj = new THREE.Object3D(),
         col = new THREE.Color(),
-        tmp = V(),
-        tmp2 = V();
+        tmp = V();
       const axisZ = V(0, 0, 1),
         heatA = new THREE.Color(0x59569c),
         heatB = new THREE.Color(0x83ad7d),
@@ -1872,7 +1870,6 @@
             }
           }
         }
-        leafCapHit = requested > C.clusters;
         foliage = instances(leafG, leafMat, sites.length);
         const leafHue =
           P.sp === 'Peach' ? 0.263 : P.sp === 'Cherry' ? 0.302 : 0.252;
