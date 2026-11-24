@@ -1,3 +1,7 @@
+if ! git diff --quiet -- src || [ -n "$(git ls-files --others --exclude-standard src)" ]; then
+  echo "pre-commit: src/ has unstaged or untracked changes; stage them so dist matches the commit" >&2
+  exit 1
+fi
 npx lint-staged
 npm run build
 git add dist
