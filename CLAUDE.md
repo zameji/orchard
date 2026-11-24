@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Orchard Fieldwork — Pruning Studio: an interactive 3D tree-pruning simulator and teaching tool for apple, cherry, and peach training systems. The app source is a single self-contained HTML file in `src/`, named for its release version (`src/v0_1_0.html` = v0.1.0). A minified `dist/index.html` is generated from it and committed; that is the GitHub Pages artifact.
+Orchard Fieldwork — Pruning Studio: an interactive 3D tree-pruning simulator and teaching tool for apple, cherry, and peach training systems. The app source is a single self-contained HTML file at `src/index.html`. A minified `dist/index.html` is generated from it and committed; that is the GitHub Pages artifact.
 
 ## Commands
 
@@ -21,7 +21,7 @@ There is no test suite. To validate a source change: `npm run lint`, `npm run bu
 
 ## Repository layout
 
-- `src/` — source of truth, one versioned HTML file with inline JS/CSS and an import map pinning Three.js.
+- `src/` — source of truth, one HTML file with inline JS/CSS and an import map pinning Three.js.
 - `dist/` — generated, committed minified output (`dist/index.html`), deployed by `.github/workflows/deploy.yml` on push to main.
 - `build.mjs` — build glue: globs exactly one `src/*.html`, minifies, writes `dist/index.html`.
 

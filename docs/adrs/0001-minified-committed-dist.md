@@ -13,8 +13,9 @@ or minifies, and how Pages gets the artifact (branch-based Pages can only serve
 
 ## Decision
 
-- `src/v0_1_0.html` is the source of truth. The versioned filename is kept;
-  `build.mjs` globs exactly one `src/*.html` and fails on zero or many.
+- `src/index.html` is the source of truth — a stable name; versions live in
+  git history, not filenames. `build.mjs` globs exactly one `src/*.html` and
+  fails on zero or many.
 - The build minifies (`html-minifier-terser`: whitespace, comments, inline
   JS/CSS) to `dist/index.html`. Node's `--check` on the extracted module and a
   JSON parse of the importmap gate the build in review.
