@@ -25,10 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # npm install (not ci) + no npm cache: package-lock.json cannot be
-      # generated in the authoring environment (registry blocked). Once a real
-      # lock is committed, restore `cache: npm` and `npm ci`.
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
