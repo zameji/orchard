@@ -77,8 +77,6 @@ export interface Habit {
   label: string;
   text: string;
   naturalForm: TrainingSystem;
-  /** Phase-1 growth shape; phase 2 takes shape from the selected form. */
-  growsOpen: boolean;
   species: SpeciesId[];
   spurIntensity: number;
   spurGoodMaxAge: number;

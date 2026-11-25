@@ -1,7 +1,6 @@
 import type { Vector3 } from 'three';
 import { DEG, GOLD, TAU, UP, V, clamp } from '../util.js';
 import { mulberry32, noise } from './random.js';
-import { forms } from './systems.js';
 import type { TrainingForm, TreeSpec } from './axes.js';
 import type {
   Branch,
@@ -151,12 +150,18 @@ export class Tree implements TreeState {
       8,
       Math.round((7 + 1.35 * yr ** 1.56) * spec.cultivar.vigor),
     );
-    // Growth shape follows the habit for now; the training form drives it
-    // once form-driven growth lands (then this indirection goes away).
-    const form = spec.habit.growsOpen ? forms.vase : forms.leader;
     const rooted = m.list[0],
       rootAz = noise(this.seed, 0, 47) * TAU;
-    const g: Growth = { yr, r, bid, spec, form, rooted, rootAz, taper };
+    const g: Growth = {
+      yr,
+      r,
+      bid,
+      spec,
+      form: spec.form,
+      rooted,
+      rootAz,
+      taper,
+    };
     this.extend(m, g);
     if (heavy) this.surge(m, g);
     const sprouts = this.allocate(want, capacity, caps, yr);
