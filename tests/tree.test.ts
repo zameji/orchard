@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Canopy } from '../src/js/sim/model.js';
+import { withForm } from '../src/js/sim/spec.js';
 import { Tree } from '../src/js/sim/tree.js';
 import {
   assertInvariants,
@@ -94,6 +95,21 @@ describe('growth', () => {
     const p = plant(74129, specs.peachRenewal, 5);
     expect(p.m.score).toBe(62);
     expect(p.m.fruitCount).toBe(41);
+  });
+
+  it('grows the selected form, not the habit default', () => {
+    const vase = plant(74129, specs.appleTip, 6);
+    const leader = plant(74129, withForm(specs.appleTip, 'leader'), 6);
+    expect(JSON.stringify(vase.t.edges)).not.toBe(
+      JSON.stringify(leader.t.edges),
+    );
+    // Open center: the rooted stem never extends; leader form keeps a trunk.
+    expect(
+      vase.t.edges.filter((e) => e.role === 'leader'),
+    ).toHaveLength(1);
+    expect(
+      leader.t.edges.filter((e) => e.role === 'leader').length,
+    ).toBeGreaterThan(1);
   });
 });
 
