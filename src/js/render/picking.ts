@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { clamp, V } from '../util.js';
 import type { Branch, Model, Rec } from '../sim/types.js';
 import { tmp } from './geometry.js';
-import { stage, type Stage } from './scene.js';
-import { treeMesh, type TreeMesh } from './tree-mesh.js';
+import type { Stage } from './scene.js';
+import type { TreeMesh } from './tree-mesh.js';
 
 export interface PickDeps {
   m: Model;
@@ -129,5 +129,3 @@ export class Picker {
     propose(q, clamp(t, 0.04, 0.985));
   }
 }
-
-export const picker = new Picker(stage, treeMesh);
