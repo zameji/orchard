@@ -15,7 +15,7 @@ import type {
   TrainingSystem,
   UndoEntry,
 } from '../sim/types.js';
-import { guideText, recommendation, related } from './advice.js';
+import { Advisor } from './advice.js';
 import {
   controls,
   fitTree,
@@ -161,18 +161,19 @@ function plant(c: Config, announce = true) {
 }
 
 function recommend() {
+  const advisor = new Advisor(P, system, renovationStart);
   recs = [];
   if (learning) {
     const pool = M.list
-      .map((q) => recommendation(q, M, T, system, P, renovationStart))
+      .map((q) => advisor.recommend(q, M, T))
       .filter((r): r is Rec => !!r)
       .sort((a, b) => b.weight - a.weight);
     for (const r of pool) {
-      if (recs.every((k) => !related(k.q, r.q))) recs.push(r);
+      if (recs.every((k) => !Advisor.related(k.q, r.q))) recs.push(r);
       if (recs.length === 3) break;
     }
   }
-  $('systemNote').textContent = guideText(P, system, T.year, renovationStart);
+  $('systemNote').textContent = advisor.guide(T.year);
   const el = $('recList');
   el.replaceChildren();
   if (learning) {
