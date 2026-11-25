@@ -89,6 +89,14 @@ export class Studio implements UiHooks {
     this.hud();
   }
 
+  private redrawMarkers() {
+    this.treeMesh.drawMarkers(this.recs, this.learning, this.selected, this.m);
+  }
+
+  private formatParts(pts: number[]) {
+    return partNames.map((label, i) => label + ' ' + signed(pts[i]));
+  }
+
   private hud() {
     this.ui.hud({
       year: 'Year ' + this.tree.year,
@@ -149,7 +157,7 @@ export class Studio implements UiHooks {
     this.ui.renderRecs(this.recs, this.learning, (r) =>
       this.propose(r.q, 0, r.reason),
     );
-    this.treeMesh.drawMarkers(this.recs, this.learning, this.selected, this.m);
+    this.redrawMarkers();
   }
 
   propose(q: Branch | null, at: number, reason = '') {
@@ -164,7 +172,7 @@ export class Studio implements UiHooks {
     c.grade = new Grader(this.tree, this.P).assess(q, c, this.m, this.system);
     this.selected = c;
     this.treeMesh.paintWood(this.selected);
-    this.treeMesh.drawMarkers(this.recs, this.learning, this.selected, this.m);
+    this.redrawMarkers();
     this.ui.showPreview({
       title: at ? 'Heading · shorten shoot' : 'Thinning · branch collar',
       score: c.grade.score + '/100 cut',
@@ -177,7 +185,7 @@ export class Studio implements UiHooks {
               : 'Heading stone fruit costs renewal wood and provokes upright regrowth. '
             : 'A collar cut redirects growth to retained limbs. ') +
         `${pct(c.model.removal)} of live length removed this year if confirmed (guide ${pct(budget(this.P))}). Canopy ${this.m.score} → ${c.model.score}.`,
-      parts: partNames.map((label, i) => label + ' ' + signed(c.grade!.pts[i])),
+      parts: this.formatParts(c.grade!.pts),
     });
     this.stage.viewport();
   }
@@ -187,7 +195,7 @@ export class Studio implements UiHooks {
     this.selected = null;
     this.ui.hidePreview();
     this.treeMesh.paintWood(this.selected);
-    this.treeMesh.drawMarkers(this.recs, this.learning, this.selected, this.m);
+    this.redrawMarkers();
     this.stage.viewport();
   }
 
@@ -207,7 +215,7 @@ export class Studio implements UiHooks {
     this.stage.viewport();
     this.ui.notice(
       `Cut ${c.grade!.score}/100 · canopy ${signed(c.grade!.delta)} → ${this.m.score}. ` +
-        partNames.map((s, i) => s + ' ' + signed(c.grade!.pts[i])).join(' · '),
+        this.formatParts(c.grade!.pts).join(' · '),
       7800,
     );
   }
