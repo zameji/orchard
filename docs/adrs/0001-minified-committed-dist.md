@@ -1,7 +1,7 @@
 # 0001. Minified, committed dist built by the pre-commit hook
 
 Date: 2026-11-24
-Status: Accepted
+Status: Superseded by 0002
 
 ## Context
 
