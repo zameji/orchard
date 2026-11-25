@@ -1,9 +1,10 @@
 # Orchard Fieldwork — Pruning Studio
 
-A single-file pruning simulator, one-shot coded by GPT-6.2-Astra. One HTML file
-(`src/index.html`) holds the whole app: simulation, rendering, and UI. It teaches
-apple, cherry, and peach training systems by letting you prune a living 3D tree
-and watch the consequences play out over seasons.
+A pruning simulator, one-shot coded by GPT-6.2-Astra and since modularized into
+TypeScript sources. `src/index.html` holds the markup, styles, and the Three.js
+import map; simulation, rendering, and UI live in `src/js/`. It teaches apple,
+cherry, and peach training systems by letting you prune a living 3D tree and
+watch the consequences play out over seasons.
 
 **[Try it →](https://zameji.github.io/orchard/)**
 
@@ -50,7 +51,7 @@ and watch the consequences play out over seasons.
 - **Structural flaws** — narrow crotches, rival leaders, inward growth, and
   crossing branches are flagged from geometry and fed into cut grading.
 - **Fruit load and sag** — pipe-model wood radii, fruit-load bending recomputed
-  every derive, and parent-shape inheritance for natural branch angles.
+  on every derivation, and parent-shape inheritance for natural branch angles.
 - **Canopy score** — a 0–100 aggregate of light, structure, health, and crop
   index, dinged for over-removal and excessive heading.
 
@@ -59,30 +60,34 @@ and watch the consequences play out over seasons.
 This project is meant to be tinkered with. Ideas to take and run:
 
 - new species or cultivar profiles (add an entry to `profiles` in
-  `src/index.html`),
+  `src/js/sim/config.ts`),
 - other training systems for the Learn tab,
 - richer cut-grading rules or new flaw detectors,
 - alternative light models, weather, or disease pressure,
 - better accessibility and mobile input.
 
-The code is deliberately plain: data (`T`) → derived model (`M`) → display, with
-`derive(T)` the only bridge. Cut previews work by deriving a hypothetical tree,
-so new simulation behavior automatically shows up in previews. Start with
+The code is deliberately plain: tree state (`Tree`) → derived model (`Canopy`) →
+display, with `new Canopy(tree, profile)` the only bridge. Cut previews work by
+deriving a hypothetical tree, so new simulation behavior automatically shows up
+in previews. Start with
 `CLAUDE.md` for the architecture and invariants, and
 `docs/adrs/` for recorded decisions. Issues and PRs welcome.
 
 ## Development
 
 ```sh
-npm ci            # install dev tooling (also installs git hooks)
-npm run lint      # ESLint over source and inline module JS
-npm run build     # minify src/index.html → dist/index.html
-npm run format    # Prettier write (format:check to verify)
+npm ci              # install dev tooling (also installs git hooks)
+npm test            # Vitest characterization suite (simulation core)
+npm run typecheck   # tsc --noEmit
+npm run lint        # ESLint over the TypeScript sources
+npm run build       # tsc → dist/js/*.js + copy index.html → dist/
+npm run format      # Prettier write (format:check to verify)
 ```
 
-The pre-commit hook keeps `dist/` in sync with `src/` — never edit `dist/` by
-hand. To validate a change by hand: lint, build, syntax-check the inline module
-(`node --check`), and open `dist/index.html` in a WebGL 2 browser (Three.js
-loads from jsDelivr, so the first load needs network).
+`dist/` is generated and not committed — CI builds it before deploy. To validate
+a change by hand: typecheck, test, lint, build, then serve `dist/` from a local
+static server and open it in a WebGL 2 browser (Three.js loads from jsDelivr, so
+the first load needs network). Rendering and DOM are outside the test suite;
+browser smoke is the check for render-layer changes.
 
 MIT licensed.
