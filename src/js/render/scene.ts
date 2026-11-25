@@ -244,5 +244,3 @@ export class Stage {
     this.invalidate();
   }
 }
-
-export const stage = new Stage();

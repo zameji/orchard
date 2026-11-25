@@ -34,7 +34,7 @@ import {
   stemMat,
   stickMatrix,
 } from './geometry.js';
-import { stage, type Stage } from './scene.js';
+import type { Stage } from './scene.js';
 
 export interface RenderCtx {
   t: TreeState;
@@ -370,5 +370,3 @@ export class TreeMesh {
     this.stage.invalidate();
   }
 }
-
-export const treeMesh = new TreeMesh(stage);
