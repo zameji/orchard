@@ -159,7 +159,9 @@ export class Ui {
       .forEach((b) => (b.onclick = () => this.hooks?.onTime(b.dataset.time!)));
     $('learn').onclick = () => this.hooks?.onLearn();
     $('form').onchange = (e: Event) =>
-      this.hooks?.onForm((e.target as HTMLSelectElement).value as TrainingSystem);
+      this.hooks?.onForm(
+        (e.target as HTMLSelectElement).value as TrainingSystem,
+      );
     $('practice').onchange = (e: Event) =>
       this.hooks?.onPractice(
         (e.target as HTMLSelectElement).value as PracticeMode,
@@ -203,7 +205,7 @@ export class Ui {
 
   hud(view: HudView) {
     $('year').textContent = view.year;
-    $('habit').textContent = view.habit;
+    $('hudHabit').textContent = view.habit;
     $('stats').textContent = view.stats;
     $('undo').disabled = !view.undoEnabled;
     $('hint').textContent = view.hint;
