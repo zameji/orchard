@@ -2,3 +2,4 @@ node_modules/
 current_state.md
 dist/
 .vitest/
+.playwright-mcp/
