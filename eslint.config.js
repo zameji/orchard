@@ -11,6 +11,9 @@ export default tseslint.config(
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },
+    rules: {
+      complexity: ['warn', 10],
+    },
   },
   {
     files: ['**/*.js', '**/*.mjs'],
