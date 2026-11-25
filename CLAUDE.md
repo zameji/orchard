@@ -53,7 +53,7 @@ Everything is plain data + derived model + display, in that order. Keep the laye
 - Edges stay sorted by id and parents precede children; `Tree.undo` re-sorts by id when restoring removed edges.
 - All randomness flows from `(T.seed, edge id, channel)` — never from call order or a mutable RNG stream.
 - `new Canopy(t, profile)` is the only way to compute the derived model; cut previews must go through `CutPlanner.plan` + `Canopy`, never mutate a `Tree` in place.
-- The sim layer (`src/js/sim/`) stays browser-free: no DOM, no Three.js.
+- The sim layer (`src/js/sim/`) stays headless: no DOM, no renderer or scene objects. `three` appears there only as vector math (`Vector3` types, `V`/`UP` helpers), never as display code.
 - Segment count is budgeted (`C.max`); new instanced geometry must respect the `caps` tiers.
 - `dist/` is build output only and never committed; `npm run build` is the only way to produce it.
 - The characterization goldens in `tests/` are the behavior oracle; changing sim behavior must move goldens deliberately, never accidentally.
