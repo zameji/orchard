@@ -10,28 +10,32 @@
   },
   "scripts": {
     "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{js,mjs,html}": [
+    "*.{js,mjs,ts}": [
       "eslint --fix",
       "prettier --write"
     ],
-    "*.{css,json,md,yml,yaml}": [
+    "*.{html,css,json,md,yml,yaml}": [
       "prettier --write"
     ]
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "eslint": "^9.0.0",
-    "eslint-plugin-html": "^8.0.0",
     "globals": "^16.0.0",
-    "html-minifier-terser": "^7.1.0",
     "husky": "^9.0.0",
     "lint-staged": "^16.0.0",
-    "prettier": "^3.6.0"
+    "prettier": "^3.6.0",
+    "three": "0.169.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
   }
 }
