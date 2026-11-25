@@ -28,6 +28,41 @@ function cone(d: Vector3, angle: number, az: number) {
     .normalize();
 }
 
+interface Bid {
+  q: Branch;
+  at: number;
+  d: Vector3;
+  role: Role;
+  order: number;
+  fork: boolean;
+  len: number;
+  priority: number;
+}
+
+/**
+ * Per-year growth context. `r` is the year's mulberry32 stream: its draw order
+ * is part of the behavior, so phase methods must draw through `g.r` in the
+ * established sequence and never reorder statements around draws.
+ */
+interface Growth {
+  yr: number;
+  r: () => number;
+  bid: (
+    q: Branch,
+    at: number,
+    d: Vector3,
+    role: Role,
+    order: number,
+    fork: boolean,
+    len: number,
+    priority: number,
+  ) => void;
+  vase: boolean;
+  rooted: Branch;
+  rootAz: number;
+  taper: number;
+}
+
 /**
  * Graph state owner. Edges are plain data in parent-before-child order;
  * rest directions never accumulate display deformations. Each edge is one
@@ -97,32 +132,8 @@ export class Tree implements TreeState {
     const yr = this.year + 1,
       r = mulberry32((this.seed ^ Math.imul(yr, 0x9e3779b1)) >>> 0);
     const heavy = this.removed / Math.max(0.01, this.base) > budget(profile);
-    const want: {
-      q: Branch;
-      at: number;
-      d: Vector3;
-      role: Role;
-      order: number;
-      fork: boolean;
-      len: number;
-      priority: number;
-    }[] = [];
-    let sprouts = 0;
-    const taper = clamp(1 - 0.048 * Math.max(0, yr - 4), 0.36, 1);
-    const capacity = Math.max(
-      8,
-      Math.round((7 + 1.35 * yr ** 1.56) * profile.v),
-    );
-    function bid(
-      q: Branch,
-      at: number,
-      d: Vector3,
-      role: Role,
-      order: number,
-      fork: boolean,
-      len: number,
-      priority: number,
-    ) {
+    const want: Bid[] = [];
+    const bid: Growth['bid'] = (q, at, d, role, order, fork, len, priority) => {
       want.push({
         q,
         at,
@@ -133,179 +144,241 @@ export class Tree implements TreeState {
         len,
         priority: priority + r() * 0.8,
       });
-    }
+    };
+    const taper = clamp(1 - 0.048 * Math.max(0, yr - 4), 0.36, 1);
+    const capacity = Math.max(
+      8,
+      Math.round((7 + 1.35 * yr ** 1.56) * profile.v),
+    );
     const vase = profile.mode === 'peach' || profile.mode === 'tart';
     const rooted = m.list[0],
       rootAz = noise(this.seed, 0, 47) * TAU;
+    const g: Growth = { yr, r, bid, vase, rooted, rootAz, taper };
+    this.extend(m, profile, g);
+    if (heavy) this.surge(m, profile, g);
+    const sprouts = this.allocate(want, capacity, caps, yr);
+    this.restock(m, profile, yr);
+    return sprouts;
+  }
+
+  /** One pass per branch: mortality, then bids. Draws run in this order. */
+  private extend(m: Model, profile: Profile, g: Growth) {
     for (const q of m.list) {
       const s = q.s;
       s.load = q.fruits.length;
       if (s.dead) continue;
-      if (q.age >= 2 && !q.kids.length && q.light < 0.34 && r() < 0.15) {
+      if (q.age >= 2 && !q.kids.length && q.light < 0.34 && g.r() < 0.15) {
         s.dead = true;
         continue;
       }
-      const leader = s.role === 'leader',
-        scaf = s.role === 'scaffold',
-        young = q.age === 0;
-      const released = s.release === this.year;
-      // Competing bud sinks share a finite whole-tree extension budget below.
-      // A remaining scaffold with a released union gets preferential flow.
-      const supply = clamp(
-        0.76 +
-          0.29 * q.light +
-          0.14 * (released ? 1 : 0) -
-          0.035 * Math.min(4, s.load),
-        0.63,
-        1.17,
+      this.branchBid(q, s, profile, g);
+    }
+  }
+
+  /** Heading response, extension bid and lateral scaffolds for one branch. */
+  private branchBid(q: Branch, s: Edge, profile: Profile, g: Growth) {
+    const young = q.age === 0;
+    const released = s.release === this.year;
+    // Competing bud sinks share a finite whole-tree extension budget below.
+    // A remaining scaffold with a released union gets preferential flow.
+    const supply = clamp(
+      0.76 +
+        0.29 * q.light +
+        0.14 * (released ? 1 : 0) -
+        0.035 * Math.min(4, s.load),
+      0.63,
+      1.17,
+    );
+    const ext = 0.535 * profile.v * g.taper * supply;
+    if (s.head === this.year) {
+      this.headingSprouts(q, s, profile, g);
+      return;
+    }
+    if (!young && !released && q.age > 2) return;
+    const ax = q.kids.some((k) => !k.s.fork && k.s.at > 0.95);
+    this.extensionBid(q, s, profile, g, ext, young, released, ax);
+    this.lateralBids(q, s, profile, g, ext, young, released, ax);
+  }
+
+  /** Watersprouts spawned by this year's heading cut. */
+  private headingSprouts(q: Branch, s: Edge, profile: Profile, g: Growth) {
+    const count = 2 + Math.floor(g.r() * 2 * profile.react);
+    for (let j = 0; j < count; j++) {
+      const a = g.rootAz + s.id * GOLD + j * GOLD,
+        tilt = 0.13 + g.r() * 0.34;
+      g.bid(
+        q,
+        0.79 + (0.19 * (j + 0.5)) / count,
+        V(tilt * Math.cos(a), 1, tilt * Math.sin(a)).normalize(),
+        'sprout',
+        s.order + 1,
+        true,
+        (0.43 + g.r() * 0.25) * profile.v * clamp(g.taper + 0.22, 0.65, 1.1),
+        12,
       );
-      const ext = 0.535 * profile.v * taper * supply;
-      if (s.head === this.year) {
-        const count = 2 + Math.floor(r() * 2 * profile.react);
-        for (let j = 0; j < count; j++) {
-          const a = rootAz + s.id * GOLD + j * GOLD,
-            tilt = 0.13 + r() * 0.34;
-          bid(
-            q,
-            0.79 + (0.19 * (j + 0.5)) / count,
-            V(tilt * Math.cos(a), 1, tilt * Math.sin(a)).normalize(),
-            'sprout',
-            s.order + 1,
-            true,
-            (0.43 + r() * 0.25) * profile.v * clamp(taper + 0.22, 0.65, 1.1),
-            12,
-          );
-        }
-        continue;
-      }
-      if (!young && !released && q.age > 2) continue;
-      const ax = q.kids.some((k) => !k.s.fork && k.s.at > 0.95);
-      // Tip-bearing habits leave a larger share of lateral terminal buds floral.
-      const floral =
-        profile.mode === 'tip'
-          ? 0.55
-          : profile.mode === 'tart'
-            ? 0.34
-            : profile.mode === 'mixed'
-              ? 0.25
-              : 0.13;
-      const mayExtend = young || released || (!q.kids.length && r() < 0.17);
-      if (
-        !ax &&
-        mayExtend &&
-        !(vase && q === rooted) &&
-        q.b.y < 5.9 &&
-        (leader || scaf || r() < (1 - floral) * (0.48 + 0.52 * q.light))
-      ) {
-        let d = q.dir.clone();
-        if (leader) d.lerp(UP, 0.69 * profile.ap);
-        else if (scaf) {
-          const az = Math.atan2(d.z, d.x) + (r() - 0.5) * 0.33,
-            angle = (vase ? 38 : profile.angle - 5) + (r() - 0.5) * 15;
-          d.lerp(
-            V(
-              Math.sin(angle * DEG) * Math.cos(az),
-              Math.cos(angle * DEG),
-              Math.sin(angle * DEG) * Math.sin(az),
-            ),
-            0.52,
-          );
-        } else d = cone(d, (5 + r() * 16) * DEG, r() * TAU);
-        d.z -= 0.045 + (1 - q.light) * 0.085;
-        d.y += 0.035;
+    }
+  }
+
+  /** Annual extension from the tip, when the branch may extend at all. */
+  private extensionBid(
+    q: Branch,
+    s: Edge,
+    profile: Profile,
+    g: Growth,
+    ext: number,
+    young: boolean,
+    released: boolean,
+    ax: boolean,
+  ) {
+    const leader = s.role === 'leader',
+      scaf = s.role === 'scaffold';
+    // Tip-bearing habits leave a larger share of lateral terminal buds floral.
+    const floral =
+      profile.mode === 'tip'
+        ? 0.55
+        : profile.mode === 'tart'
+          ? 0.34
+          : profile.mode === 'mixed'
+            ? 0.25
+            : 0.13;
+    const mayExtend = young || released || (!q.kids.length && g.r() < 0.17);
+    if (
+      !ax &&
+      mayExtend &&
+      !(g.vase && q === g.rooted) &&
+      q.b.y < 5.9 &&
+      (leader || scaf || g.r() < (1 - floral) * (0.48 + 0.52 * q.light))
+    ) {
+      let d = q.dir.clone();
+      if (leader) d.lerp(UP, 0.69 * profile.ap);
+      else if (scaf) {
+        const az = Math.atan2(d.z, d.x) + (g.r() - 0.5) * 0.33,
+          angle = (g.vase ? 38 : profile.angle - 5) + (g.r() - 0.5) * 15;
+        d.lerp(
+          V(
+            Math.sin(angle * DEG) * Math.cos(az),
+            Math.cos(angle * DEG),
+            Math.sin(angle * DEG) * Math.sin(az),
+          ),
+          0.52,
+        );
+      } else d = cone(d, (5 + g.r() * 16) * DEG, g.r() * TAU);
+      d.z -= 0.045 + (1 - q.light) * 0.085;
+      d.y += 0.035;
+      d.normalize();
+      g.bid(
+        q,
+        1,
+        d,
+        s.role,
+        s.order,
+        false,
+        ext *
+          (leader ? 1 : scaf ? (g.vase ? 1.22 : 1.04) : 0.69 + g.r() * 0.3) *
+          (0.94 + 0.12 * g.r()),
+        leader ? 9 : scaf ? 6 : 2.25 + q.light,
+      );
+    }
+  }
+
+  /** Scaffold and side shoots placed along the branch. */
+  private lateralBids(
+    q: Branch,
+    s: Edge,
+    profile: Profile,
+    g: Growth,
+    ext: number,
+    young: boolean,
+    released: boolean,
+    ax: boolean,
+  ) {
+    const leader = s.role === 'leader',
+      scaf = s.role === 'scaffold';
+    const { yr, r, vase, rooted, rootAz } = g;
+    let sides = 0;
+    if (young) {
+      if (leader) sides = q === rooted ? (vase ? 4 : 3) : r() < 0.55 ? 2 : 1;
+      else if (scaf) sides = 1 + (r() < 0.53 ? 1 : 0);
+      else sides = r() < (0.32 + q.light * 0.43) / (1 + 0.13 * s.order) ? 1 : 0;
+    } else if (released || (!ax && q.age <= 2 && r() < 0.16 * q.light))
+      sides = 1;
+    for (let j = 0; j < sides; j++) {
+      let at, d;
+      if (leader) {
+        const a =
+          rootAz +
+          (yr - 2) * GOLD +
+          (q === rooted ? (j * TAU) / sides : j * GOLD) +
+          (r() - 0.5) * 0.31;
+        const angle =
+          (profile.angle + (r() - 0.5) * 20 - (r() < 0.09 ? 18 : 0)) * DEG;
+        d = V(
+          Math.cos(a) * Math.sin(angle),
+          Math.cos(angle),
+          Math.sin(a) * Math.sin(angle),
+        );
+        at =
+          (q === rooted ? 0.61 : 0.21) +
+          (j * (q === rooted ? 0.34 : 0.58)) / Math.max(1, sides - 1) +
+          0.025 * r();
+      } else {
+        at = 0.29 + (0.56 * (j + 0.25 + r() * 0.4)) / sides;
+        const angle = (r() < 0.12 ? 19 + r() * 12 : 39 + r() * 34) * DEG;
+        d = cone(q.dir, angle, r() * TAU);
+        d.y = Math.max(-0.31, d.y + 0.075);
+        d.z -= 0.08 * (1.12 - q.light);
         d.normalize();
-        bid(
-          q,
-          1,
-          d,
-          s.role,
-          s.order,
-          false,
-          ext *
-            (leader ? 1 : scaf ? (vase ? 1.22 : 1.04) : 0.69 + r() * 0.3) *
-            (0.94 + 0.12 * r()),
-          leader ? 9 : scaf ? 6 : 2.25 + q.light,
-        );
       }
-      let sides = 0;
-      if (young) {
-        if (leader) sides = q === rooted ? (vase ? 4 : 3) : r() < 0.55 ? 2 : 1;
-        else if (scaf) sides = 1 + (r() < 0.53 ? 1 : 0);
-        else
-          sides = r() < (0.32 + q.light * 0.43) / (1 + 0.13 * s.order) ? 1 : 0;
-      } else if (released || (!ax && q.age <= 2 && r() < 0.16 * q.light))
-        sides = 1;
-      for (let j = 0; j < sides; j++) {
-        let at, d;
-        if (leader) {
-          const a =
-            rootAz +
-            (yr - 2) * GOLD +
-            (q === rooted ? (j * TAU) / sides : j * GOLD) +
-            (r() - 0.5) * 0.31;
-          const angle =
-            (profile.angle + (r() - 0.5) * 20 - (r() < 0.09 ? 18 : 0)) * DEG;
-          d = V(
-            Math.cos(a) * Math.sin(angle),
-            Math.cos(angle),
-            Math.sin(a) * Math.sin(angle),
-          );
-          at =
-            (q === rooted ? 0.61 : 0.21) +
-            (j * (q === rooted ? 0.34 : 0.58)) / Math.max(1, sides - 1) +
-            0.025 * r();
-        } else {
-          at = 0.29 + (0.56 * (j + 0.25 + r() * 0.4)) / sides;
-          const angle = (r() < 0.12 ? 19 + r() * 12 : 39 + r() * 34) * DEG;
-          d = cone(q.dir, angle, r() * TAU);
-          d.y = Math.max(-0.31, d.y + 0.075);
-          d.z -= 0.08 * (1.12 - q.light);
-          d.normalize();
-        }
-        const role: Role = leader ? 'scaffold' : 'side';
-        bid(
-          q,
-          clamp(at, 0.12, 0.97),
-          d,
-          role,
-          s.order + 1,
-          true,
-          ext *
-            (leader ? (vase ? 1.26 : 1.03) : 0.47 + 0.43 * r()) *
-            (0.91 + 0.16 * r()),
-          leader ? 5.4 : 1.55 + 0.82 * q.light,
-        );
-      }
-    }
-    if (heavy) {
-      const c = m.list
-        .filter(
-          (q) =>
-            !q.s.dead && q.age >= 1 && q.s.order <= 2 && q.s.head !== this.year,
-        )
-        .sort((a, b) => b.r - a.r);
-      const count = Math.min(
-        c.length,
-        Math.ceil((3 + yr * 0.38) * profile.react),
+      const role: Role = leader ? 'scaffold' : 'side';
+      g.bid(
+        q,
+        clamp(at, 0.12, 0.97),
+        d,
+        role,
+        s.order + 1,
+        true,
+        ext *
+          (leader ? (vase ? 1.26 : 1.03) : 0.47 + 0.43 * r()) *
+          (0.91 + 0.16 * r()),
+        leader ? 5.4 : 1.55 + 0.82 * q.light,
       );
-      for (let j = 0; j < count; j++) {
-        const q = c[j],
-          a = r() * TAU;
-        bid(
-          q,
-          0.36 + 0.57 * r(),
-          V(0.23 * Math.cos(a), 1, 0.23 * Math.sin(a)).normalize(),
-          'sprout',
-          q.s.order + 1,
-          true,
-          0.43 + 0.26 * r(),
-          11,
-        );
-      }
     }
+  }
+
+  /** Watersprout surge after over-pruning. */
+  private surge(m: Model, profile: Profile, g: Growth) {
+    const c = m.list
+      .filter(
+        (q) =>
+          !q.s.dead && q.age >= 1 && q.s.order <= 2 && q.s.head !== this.year,
+      )
+      .sort((a, b) => b.r - a.r);
+    const count = Math.min(
+      c.length,
+      Math.ceil((3 + g.yr * 0.38) * profile.react),
+    );
+    for (let j = 0; j < count; j++) {
+      const q = c[j],
+        a = g.r() * TAU;
+      g.bid(
+        q,
+        0.36 + 0.57 * g.r(),
+        V(0.23 * Math.cos(a), 1, 0.23 * Math.sin(a)).normalize(),
+        'sprout',
+        q.s.order + 1,
+        true,
+        0.43 + 0.26 * g.r(),
+        11,
+      );
+    }
+  }
+
+  /** Award the winning bids within the extension budget. */
+  private allocate(want: Bid[], capacity: number, caps: Caps, yr: number) {
     want.sort((a, b) => b.priority - a.priority);
     const slots = Math.max(0, Math.min(caps.max - this.edges.length, capacity));
     const allocation = clamp(capacity / Math.max(1, want.length), 0.77, 1.04);
+    let sprouts = 0;
     for (let i = 0; i < Math.min(want.length, slots); i++) {
       const w = want[i];
       this.append(
@@ -320,6 +393,11 @@ export class Tree implements TreeState {
       );
       if (w.role === 'sprout' && w.fork) sprouts++;
     }
+    return sprouts;
+  }
+
+  /** Season bookkeeping: crop stress, new year, live length base. */
+  private restock(m: Model, profile: Profile, yr: number) {
     const load = m.fruitCount / Math.max(1, m.live);
     this.stress =
       profile.mode === 'spur'
@@ -328,7 +406,6 @@ export class Tree implements TreeState {
     this.year = yr;
     this.removed = 0;
     this.base = this.edges.reduce((a, s) => a + (s.dead ? 0 : s.len), 0);
-    return sprouts;
   }
 
   /**
