@@ -1,22 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { profiles } from '../src/js/sim/config.js';
 import { exposures, sunDir } from '../src/js/sim/light.js';
 import { Canopy } from '../src/js/sim/model.js';
-import { plant } from './helpers.js';
+import { plant, specs } from './helpers.js';
 
 describe('Canopy', () => {
   it('does not mutate the tree state', () => {
-    const { t } = plant(74129, profiles[0], 5);
+    const { t } = plant(74129, specs.appleSpur, 5);
     const snapshot = JSON.stringify(t);
-    void new Canopy(t, profiles[0]);
-    void new Canopy(t, profiles[0]);
+    void new Canopy(t, specs.appleSpur);
+    void new Canopy(t, specs.appleSpur);
     expect(JSON.stringify(t)).toBe(snapshot);
   });
 
   it('is deterministic and order-independent to read', () => {
-    const { t } = plant(74129, profiles[0], 5);
-    const a = new Canopy(t, profiles[0]),
-      b = new Canopy(t, profiles[0]);
+    const { t } = plant(74129, specs.appleSpur, 5);
+    const a = new Canopy(t, specs.appleSpur),
+      b = new Canopy(t, specs.appleSpur);
     expect(a.score).toBe(b.score);
     expect(a.fruitCount).toBe(b.fruitCount);
     expect(a.list.map((q) => q.light)).toEqual(b.list.map((q) => q.light));
@@ -24,7 +23,7 @@ describe('Canopy', () => {
   });
 
   it('computes parent-child geometry consistently', () => {
-    const { m } = plant(74129, profiles[0], 5);
+    const { m } = plant(74129, specs.appleSpur, 5);
     for (const q of m.list) {
       expect(q.r).toBeGreaterThan(0);
       if (q.par)
@@ -36,7 +35,7 @@ describe('Canopy', () => {
   });
 
   it('scores stay within 0..100 and light within bounds', () => {
-    const { m } = plant(74129, profiles[0], 5);
+    const { m } = plant(74129, specs.appleSpur, 5);
     expect(m.score).toBeGreaterThanOrEqual(0);
     expect(m.score).toBeLessThanOrEqual(100);
     for (const q of m.list) {
@@ -51,7 +50,7 @@ describe('Canopy', () => {
 
 describe('exposures', () => {
   it('returns bounded, deterministic values', () => {
-    const { t, m } = plant(74129, profiles[0], 5);
+    const { t, m } = plant(74129, specs.appleSpur, 5);
     const s = sunDir(12);
     const a = exposures(m.list, s),
       b = exposures(m.list, s);
@@ -64,7 +63,7 @@ describe('exposures', () => {
   });
 
   it('brightens the sunward side of the canopy', () => {
-    const { m } = plant(74129, profiles[0], 8);
+    const { m } = plant(74129, specs.appleSpur, 8);
     const s = sunDir(12);
     const lit = exposures(m.list, s);
     let sunward = 0,

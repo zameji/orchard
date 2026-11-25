@@ -1,9 +1,6 @@
 import type { Vector3 } from 'three';
 
 export type Role = 'leader' | 'scaffold' | 'side' | 'sprout';
-export type FruitingMode =
-  'spur' | 'tip' | 'mixed' | 'sweet' | 'tart' | 'peach';
-export type TrainingSystem = 'leader' | 'vase' | 'renovate';
 export type CapsKey = 'low' | 'medium' | 'high' | 'ultra';
 
 /** One annual extension; edges stay sorted by id, parents precede children. */
@@ -89,7 +86,7 @@ export interface Branch {
   subCount: number;
 }
 
-/** Derived model M; recompute via `new Canopy(t, profile)` after any state change. */
+/** Derived model M; recompute via `new Canopy(t, spec)` after any state change. */
 export interface Model {
   list: Branch[];
   map: Map<number, Branch>;
@@ -105,21 +102,6 @@ export interface Model {
   struct: number;
   productive: number;
   removal: number;
-}
-
-/** Cultivar parameter set driving simulation and advice. */
-export interface Profile {
-  sp: 'Apple' | 'Cherry' | 'Peach';
-  name: string;
-  mode: FruitingMode;
-  v: number;
-  ap: number;
-  angle: number;
-  react: number;
-  sag: number;
-  cal: number;
-  sys: 'leader' | 'vase';
-  food: string;
 }
 
 /** Quality tier bounding segment/leaf budgets and pixel ratio. */

@@ -1,7 +1,8 @@
 import type { Vector3 } from 'three';
 import { DEG, GOLD, TAU, UP, V, clamp } from '../util.js';
-import { budget } from './config.js';
 import { mulberry32, noise } from './random.js';
+import { forms } from './systems.js';
+import type { TrainingForm, TreeSpec } from './axes.js';
 import type {
   Branch,
   Caps,
@@ -9,7 +10,6 @@ import type {
   CutPlan,
   Edge,
   Model,
-  Profile,
   Role,
   TreeState,
   UndoEntry,
@@ -57,7 +57,8 @@ interface Growth {
     len: number,
     priority: number,
   ) => void;
-  vase: boolean;
+  spec: TreeSpec;
+  form: TrainingForm;
   rooted: Branch;
   rootAz: number;
   taper: number;
@@ -128,10 +129,10 @@ export class Tree implements TreeState {
     return s;
   }
 
-  advance(m: Model, profile: Profile, caps: Caps): number {
+  advance(m: Model, spec: TreeSpec, caps: Caps): number {
     const yr = this.year + 1,
       r = mulberry32((this.seed ^ Math.imul(yr, 0x9e3779b1)) >>> 0);
-    const heavy = this.removed / Math.max(0.01, this.base) > budget(profile);
+    const heavy = this.removed / Math.max(0.01, this.base) > spec.species.budget;
     const want: Bid[] = [];
     const bid: Growth['bid'] = (q, at, d, role, order, fork, len, priority) => {
       want.push({
@@ -148,21 +149,23 @@ export class Tree implements TreeState {
     const taper = clamp(1 - 0.048 * Math.max(0, yr - 4), 0.36, 1);
     const capacity = Math.max(
       8,
-      Math.round((7 + 1.35 * yr ** 1.56) * profile.v),
+      Math.round((7 + 1.35 * yr ** 1.56) * spec.cultivar.vigor),
     );
-    const vase = profile.mode === 'peach' || profile.mode === 'tart';
+    // Growth shape follows the habit for now; the training form drives it
+    // once form-driven growth lands (then this indirection goes away).
+    const form = spec.habit.growsOpen ? forms.vase : forms.leader;
     const rooted = m.list[0],
       rootAz = noise(this.seed, 0, 47) * TAU;
-    const g: Growth = { yr, r, bid, vase, rooted, rootAz, taper };
-    this.extend(m, profile, g);
-    if (heavy) this.surge(m, profile, g);
+    const g: Growth = { yr, r, bid, spec, form, rooted, rootAz, taper };
+    this.extend(m, g);
+    if (heavy) this.surge(m, g);
     const sprouts = this.allocate(want, capacity, caps, yr);
-    this.restock(m, profile, yr);
+    this.restock(m, g);
     return sprouts;
   }
 
   /** One pass per branch: mortality, then bids. Draws run in this order. */
-  private extend(m: Model, profile: Profile, g: Growth) {
+  private extend(m: Model, g: Growth) {
     for (const q of m.list) {
       const s = q.s;
       s.load = q.fruits.length;
@@ -171,12 +174,12 @@ export class Tree implements TreeState {
         s.dead = true;
         continue;
       }
-      this.branchBid(q, s, profile, g);
+      this.branchBid(q, s, g);
     }
   }
 
   /** Heading response, extension bid and lateral scaffolds for one branch. */
-  private branchBid(q: Branch, s: Edge, profile: Profile, g: Growth) {
+  private branchBid(q: Branch, s: Edge, g: Growth) {
     const young = q.age === 0;
     const released = s.release === this.year;
     // Competing bud sinks share a finite whole-tree extension budget below.
@@ -189,20 +192,20 @@ export class Tree implements TreeState {
       0.63,
       1.17,
     );
-    const ext = 0.535 * profile.v * g.taper * supply;
+    const ext = 0.535 * g.spec.cultivar.vigor * g.taper * supply;
     if (s.head === this.year) {
-      this.headingSprouts(q, s, profile, g);
+      this.headingSprouts(q, s, g);
       return;
     }
     if (!young && !released && q.age > 2) return;
     const ax = q.kids.some((k) => !k.s.fork && k.s.at > 0.95);
-    this.extensionBid(q, s, profile, g, ext, young, released, ax);
-    this.lateralBids(q, s, profile, g, ext, young, released, ax);
+    this.extensionBid(q, s, g, ext, young, released, ax);
+    this.lateralBids(q, s, g, ext, young, released, ax);
   }
 
   /** Watersprouts spawned by this year's heading cut. */
-  private headingSprouts(q: Branch, s: Edge, profile: Profile, g: Growth) {
-    const count = 2 + Math.floor(g.r() * 2 * profile.react);
+  private headingSprouts(q: Branch, s: Edge, g: Growth) {
+    const count = 2 + Math.floor(g.r() * 2 * g.spec.cultivar.headingResponse);
     for (let j = 0; j < count; j++) {
       const a = g.rootAz + s.id * GOLD + j * GOLD,
         tilt = 0.13 + g.r() * 0.34;
@@ -213,7 +216,9 @@ export class Tree implements TreeState {
         'sprout',
         s.order + 1,
         true,
-        (0.43 + g.r() * 0.25) * profile.v * clamp(g.taper + 0.22, 0.65, 1.1),
+        (0.43 + g.r() * 0.25) *
+          g.spec.cultivar.vigor *
+          clamp(g.taper + 0.22, 0.65, 1.1),
         12,
       );
     }
@@ -223,7 +228,6 @@ export class Tree implements TreeState {
   private extensionBid(
     q: Branch,
     s: Edge,
-    profile: Profile,
     g: Growth,
     ext: number,
     young: boolean,
@@ -233,27 +237,22 @@ export class Tree implements TreeState {
     const leader = s.role === 'leader',
       scaf = s.role === 'scaffold';
     // Tip-bearing habits leave a larger share of lateral terminal buds floral.
-    const floral =
-      profile.mode === 'tip'
-        ? 0.55
-        : profile.mode === 'tart'
-          ? 0.34
-          : profile.mode === 'mixed'
-            ? 0.25
-            : 0.13;
+    const floral = g.spec.habit.floralShare;
     const mayExtend = young || released || (!q.kids.length && g.r() < 0.17);
     if (
       !ax &&
       mayExtend &&
-      !(g.vase && q === g.rooted) &&
+      !(g.form.openCenter && q === g.rooted) &&
       q.b.y < 5.9 &&
       (leader || scaf || g.r() < (1 - floral) * (0.48 + 0.52 * q.light))
     ) {
       let d = q.dir.clone();
-      if (leader) d.lerp(UP, 0.69 * profile.ap);
+      if (leader) d.lerp(UP, 0.69 * g.spec.cultivar.dominance);
       else if (scaf) {
         const az = Math.atan2(d.z, d.x) + (g.r() - 0.5) * 0.33,
-          angle = (g.vase ? 38 : profile.angle - 5) + (g.r() - 0.5) * 15;
+          angle =
+            (g.form.scaffoldAngleDeg ?? g.spec.cultivar.unionAngle - 5) +
+            (g.r() - 0.5) * 15;
         d.lerp(
           V(
             Math.sin(angle * DEG) * Math.cos(az),
@@ -274,7 +273,7 @@ export class Tree implements TreeState {
         s.order,
         false,
         ext *
-          (leader ? 1 : scaf ? (g.vase ? 1.22 : 1.04) : 0.69 + g.r() * 0.3) *
+          (leader ? 1 : scaf ? g.form.scaffoldExtLen : 0.69 + g.r() * 0.3) *
           (0.94 + 0.12 * g.r()),
         leader ? 9 : scaf ? 6 : 2.25 + q.light,
       );
@@ -285,7 +284,6 @@ export class Tree implements TreeState {
   private lateralBids(
     q: Branch,
     s: Edge,
-    profile: Profile,
     g: Growth,
     ext: number,
     young: boolean,
@@ -294,10 +292,11 @@ export class Tree implements TreeState {
   ) {
     const leader = s.role === 'leader',
       scaf = s.role === 'scaffold';
-    const { yr, r, vase, rooted, rootAz } = g;
+    const { yr, r, form, rooted, rootAz } = g;
     let sides = 0;
     if (young) {
-      if (leader) sides = q === rooted ? (vase ? 4 : 3) : r() < 0.55 ? 2 : 1;
+      if (leader)
+        sides = q === rooted ? form.rootedSideCount : r() < 0.55 ? 2 : 1;
       else if (scaf) sides = 1 + (r() < 0.53 ? 1 : 0);
       else sides = r() < (0.32 + q.light * 0.43) / (1 + 0.13 * s.order) ? 1 : 0;
     } else if (released || (!ax && q.age <= 2 && r() < 0.16 * q.light))
@@ -311,7 +310,10 @@ export class Tree implements TreeState {
           (q === rooted ? (j * TAU) / sides : j * GOLD) +
           (r() - 0.5) * 0.31;
         const angle =
-          (profile.angle + (r() - 0.5) * 20 - (r() < 0.09 ? 18 : 0)) * DEG;
+          (g.spec.cultivar.unionAngle +
+            (r() - 0.5) * 20 -
+            (r() < 0.09 ? 18 : 0)) *
+          DEG;
         d = V(
           Math.cos(a) * Math.sin(angle),
           Math.cos(angle),
@@ -338,7 +340,7 @@ export class Tree implements TreeState {
         s.order + 1,
         true,
         ext *
-          (leader ? (vase ? 1.26 : 1.03) : 0.47 + 0.43 * r()) *
+          (leader ? form.leaderLateralLen : 0.47 + 0.43 * r()) *
           (0.91 + 0.16 * r()),
         leader ? 5.4 : 1.55 + 0.82 * q.light,
       );
@@ -346,7 +348,7 @@ export class Tree implements TreeState {
   }
 
   /** Watersprout surge after over-pruning. */
-  private surge(m: Model, profile: Profile, g: Growth) {
+  private surge(m: Model, g: Growth) {
     const c = m.list
       .filter(
         (q) =>
@@ -355,7 +357,7 @@ export class Tree implements TreeState {
       .sort((a, b) => b.r - a.r);
     const count = Math.min(
       c.length,
-      Math.ceil((3 + g.yr * 0.38) * profile.react),
+      Math.ceil((3 + g.yr * 0.38) * g.spec.cultivar.headingResponse),
     );
     for (let j = 0; j < count; j++) {
       const q = c[j],
@@ -397,13 +399,11 @@ export class Tree implements TreeState {
   }
 
   /** Season bookkeeping: crop stress, new year, live length base. */
-  private restock(m: Model, profile: Profile, yr: number) {
-    const load = m.fruitCount / Math.max(1, m.live);
-    this.stress =
-      profile.mode === 'spur'
-        ? clamp((load - 0.78) * 0.63, 0, 0.82)
-        : clamp((load - 2.1) * 0.1, 0, 0.17);
-    this.year = yr;
+  private restock(m: Model, g: Growth) {
+    const load = m.fruitCount / Math.max(1, m.live),
+      stress = g.spec.habit.stress;
+    this.stress = clamp((load - stress.on) * stress.gain, 0, stress.cap);
+    this.year = g.yr;
     this.removed = 0;
     this.base = this.edges.reduce((a, s) => a + (s.dead ? 0 : s.len), 0);
   }

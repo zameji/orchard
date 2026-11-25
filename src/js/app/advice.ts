@@ -1,46 +1,39 @@
 import { clamp } from '../util.js';
-import { budget } from '../sim/config.js';
-import type {
-  Branch,
-  Model,
-  Profile,
-  Rec,
-  TrainingSystem,
-  TreeState,
-} from '../sim/types.js';
+import type { PracticeMode, TreeSpec } from '../sim/axes.js';
+import type { Branch, Model, Rec, TreeState } from '../sim/types.js';
 
 function stage(year: number, renovationStart: number) {
   return clamp(1 + year - renovationStart, 1, 3);
 }
 
-/** Training-system guidance and cut recommendations for one configuration. */
+/** Training-form guidance and cut recommendations for one configuration. */
 export class Advisor {
   constructor(
-    private readonly profile: Profile,
-    private readonly system: TrainingSystem,
+    private readonly spec: TreeSpec,
+    private readonly practice: PracticeMode,
     private readonly renovationStart: number,
   ) {}
 
   guide(year: number): string {
     const fit =
-      this.system === this.profile.sys
-        ? 'A natural match for this habit.'
-        : this.system === 'renovate'
-          ? 'Spread correction over several seasons.'
+      this.practice === 'renovate'
+        ? 'Spread correction over several seasons.'
+        : this.spec.form.id === this.spec.habit.naturalForm
+          ? 'A natural match for this habit.'
           : 'An alternative form; do not force it with large cuts.';
     const text =
-      this.system === 'leader'
-        ? 'Keep one leader, stagger wide scaffolds and taper the upper crown.'
-        : this.system === 'vase'
-          ? 'Build a sunny bowl around three or four outward primary limbs.'
-          : `Renovation ${stage(year, this.renovationStart)}/3: ${
-              [
-                'remove 3Ds first; leave major height changes for later',
-                'thin crowding and competing uprights in stages',
-                'renew aging fruiting zones and reassess height',
-              ][stage(year, this.renovationStart) - 1]
-            }.`;
-    return fit + ' ' + text + ' ' + this.profile.food;
+      this.practice === 'renovate'
+        ? `Renovation ${stage(year, this.renovationStart)}/3: ${
+            [
+              'remove 3Ds first; leave major height changes for later',
+              'thin crowding and competing uprights in stages',
+              'renew aging fruiting zones and reassess height',
+            ][stage(year, this.renovationStart) - 1]
+          }.`
+        : this.spec.form.id === 'leader'
+          ? 'Keep one leader, stagger wide scaffolds and taper the upper crown.'
+          : 'Build a sunny bowl around three or four outward primary limbs.';
+    return fit + ' ' + text + ' ' + this.spec.food;
   }
 
   recommend(q: Branch, m: Model, t: TreeState): Rec | null {
@@ -50,7 +43,8 @@ export class Advisor {
       q.subLive / m.live > 0.19
     )
       return null;
-    if ((t.removed + q.subLive) / t.base > budget(this.profile)) return null;
+    if ((t.removed + q.subLive) / t.base > this.spec.species.budget)
+      return null;
     let weight = 0,
       reason = '',
       best = 0;
@@ -79,23 +73,7 @@ export class Advisor {
       q.s.role === 'sprout' ? 5 : 0,
       'Thin a vigorous upright instead of heading it again.',
     );
-    if (this.system === 'leader') {
-      if (q.s.role === 'leader') return null;
-      add(
-        q.rival ? 7 : 0,
-        'Remove an upright competitor and keep one dominant leader.',
-      );
-      add(
-        q.mid.y > m.height * 0.65 && q.light < 0.53 ? 3 : 0,
-        'Thin crowded upper wood to keep the spindle tapered.',
-      );
-    } else if (this.system === 'vase') {
-      add(
-        q.rival || (q.inward && q.b.y > 0.45 * m.height) ? 6 : 0,
-        'Open the central bowl to light for lower fruiting shoots.',
-      );
-      if (q.s.role === 'scaffold' && q.par.s.role === 'leader') weight -= 5;
-    } else {
+    if (this.practice === 'renovate') {
       const st = stage(t.year, this.renovationStart);
       if (st === 1 && q.bad) weight += 3;
       if (st === 2)
@@ -108,11 +86,27 @@ export class Advisor {
           q.age >= 4 && q.light < 0.56 ? 4 : 0,
           'Renew this aging, shaded fruiting zone in stages.',
         );
+    } else if (this.spec.form.id === 'leader') {
+      if (q.s.role === 'leader') return null;
+      add(
+        q.rival ? 7 : 0,
+        'Remove an upright competitor and keep one dominant leader.',
+      );
+      add(
+        q.mid.y > m.height * 0.65 && q.light < 0.53 ? 3 : 0,
+        'Thin crowded upper wood to keep the spindle tapered.',
+      );
+    } else {
+      add(
+        q.rival || (q.inward && q.b.y > 0.45 * m.height) ? 6 : 0,
+        'Open the central bowl to light for lower fruiting shoots.',
+      );
+      if (q.s.role === 'scaffold' && q.par.s.role === 'leader') weight -= 5;
     }
     weight -=
       (4 * q.subFruit) / Math.max(1, m.fruitCount) + (3 * q.subLive) / m.live;
-    if (this.profile.sp === 'Peach' && q.age === 1 && q.light > 0.65)
-      weight -= 2;
+    if (this.spec.habit.youngAdviceGuard && q.age === 1 && q.light > 0.65)
+      weight -= this.spec.habit.youngAdviceGuard;
     if (q.angle >= 45 && q.angle <= 60 && !q.bad && q.s.role === 'scaffold')
       weight -= 2;
     return weight > 1.15 ? { q, weight, reason } : null;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GOLD, UP, V } from '../util.js';
-import type { Branch, Caps, Profile } from '../sim/types.js';
+import type { SpeciesRender } from '../sim/axes.js';
+import type { Branch, Caps } from '../sim/types.js';
 
 // Shared scratch objects; transforms are copied out before the next use.
 export const obj = new THREE.Object3D(),
@@ -69,7 +70,7 @@ export function atPoint(q: Branch, at: number) {
 }
 
 // Folded, pointed leaf blades in rosettes; no textures or alpha-card overdraw.
-export function leafGeometry(profile: Profile, caps: Caps) {
+export function leafGeometry(render: SpeciesRender, caps: Caps) {
   const pos: number[] = [],
     colArr: number[] = [],
     ind: number[] = [],
@@ -79,8 +80,8 @@ export function leafGeometry(profile: Profile, caps: Caps) {
       dx = Math.cos(a),
       dz = Math.sin(a),
       length =
-        (profile.sp === 'Peach' ? 0.121 : 0.091) * (1 - (0.16 * (j % 3)) / 2);
-    const width = length * (profile.sp === 'Peach' ? 0.13 : 0.235),
+        render.leaf.length * (1 - (0.16 * (j % 3)) / 2);
+    const width = length * render.leaf.widthRatio,
       rise = 0.013 + 0.012 * (j % 3);
     const base = pos.length / 3,
       y0 = 0.005 * j;
@@ -107,21 +108,20 @@ export function leafGeometry(profile: Profile, caps: Caps) {
   return g;
 }
 
-export function fruitGeometry(profile: Profile, caps: Caps) {
+export function fruitGeometry(render: SpeciesRender, caps: Caps) {
   const pts: THREE.Vector2[] = [],
-    apple = profile.sp === 'Apple';
+    shape = render.fruitShape;
   for (let i = 0; i <= 14; i++) {
     const a = (i * Math.PI) / 14,
       s = Math.sin(a),
       y = -Math.cos(a);
-    const width =
-      s * (apple ? 1 + 0.13 * y : profile.sp === 'Peach' ? 1 + 0.055 * y : 1);
+    const width = s * (1 + shape.widthSlope * y);
     pts.push(
       new THREE.Vector2(
         Math.max(0.0001, width),
-        y * (apple ? 0.88 : 1) -
-          (apple && y > 0 ? 0.15 * Math.exp(-s * s * 16) : 0) +
-          (apple && y < 0 ? 0.08 * Math.exp(-s * s * 18) : 0),
+        y * shape.yScale -
+          (y > 0 ? shape.topDimple[0] * Math.exp(-s * s * shape.topDimple[1]) : 0) +
+          (y < 0 ? shape.bottomDimple[0] * Math.exp(-s * s * shape.bottomDimple[1]) : 0),
       ),
     );
   }

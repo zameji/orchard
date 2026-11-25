@@ -1,9 +1,22 @@
 import { $, clamp } from '../util.js';
-import { profiles } from '../sim/config.js';
-import type { CapsKey, Rec, TrainingSystem } from '../sim/types.js';
+import { defaultCultivar, habitsFor } from '../sim/spec.js';
+import { cultivarsFor } from '../sim/cultivars.js';
+import { speciesList } from '../sim/species.js';
+import { formList } from '../sim/systems.js';
+import type {
+  HabitId,
+  PracticeMode,
+  SpeciesId,
+  TrainingSystem,
+} from '../sim/axes.js';
+import type { CapsKey, Rec } from '../sim/types.js';
 
 export interface Config {
-  profile: number;
+  species: SpeciesId;
+  habit: HabitId;
+  cultivar: string;
+  form: TrainingSystem;
+  practice: PracticeMode;
   start: number;
   seed: number;
   detail: CapsKey;
@@ -40,7 +53,8 @@ export interface UiHooks {
   onRays(): void;
   onTime(value: string): void;
   onLearn(): void;
-  onSystem(system: TrainingSystem): void;
+  onForm(form: TrainingSystem): void;
+  onPractice(practice: PracticeMode): void;
   onPan(): void;
   onFit(): void;
   onTabSwitch(): void;
@@ -122,8 +136,11 @@ export class Ui {
     $('detail').value = matchMedia('(pointer:coarse)').matches
       ? 'low'
       : 'medium';
-    $('species').onchange = () => this.fillCultivars();
-    this.fillCultivars(0);
+    this.fillStaticSelects();
+    $('species').onchange = () => this.fillSelectors();
+    $('habit').onchange = () =>
+      this.fillSelectors({ habit: $('habit').value as HabitId });
+    this.fillSelectors();
     $('plant').onclick = () => this.hooks?.onPlant();
     $('reset').onclick = () => this.hooks?.onReset();
     $('random').onclick = () => this.hooks?.onRandom();
@@ -141,9 +158,11 @@ export class Ui {
       .querySelectorAll<HTMLElement>('[data-time]')
       .forEach((b) => (b.onclick = () => this.hooks?.onTime(b.dataset.time!)));
     $('learn').onclick = () => this.hooks?.onLearn();
-    $('system').onchange = (e: Event) =>
-      this.hooks?.onSystem(
-        (e.target as HTMLSelectElement).value as TrainingSystem,
+    $('form').onchange = (e: Event) =>
+      this.hooks?.onForm((e.target as HTMLSelectElement).value as TrainingSystem);
+    $('practice').onchange = (e: Event) =>
+      this.hooks?.onPractice(
+        (e.target as HTMLSelectElement).value as PracticeMode,
       );
     $('pan').onclick = () => this.hooks?.onPan();
     $('fit').onclick = () => this.hooks?.onFit();
@@ -241,20 +260,25 @@ export class Ui {
 
   readConfig(): Config {
     return {
-      profile: +$('cultivar').value,
+      species: $('species').value,
+      habit: $('habit').value,
+      cultivar: $('cultivar').value,
+      form: $('form').value,
+      practice: $('practice').value,
       start: clamp(+$('startYear').value, 1, 15),
       seed: Math.trunc(Number($('seed').value) || 0) >>> 0,
       detail: $('detail').value,
     };
   }
 
-  writeConfig(c: Config, system: TrainingSystem) {
-    $('species').value = profiles[c.profile].sp;
-    this.fillCultivars(c.profile);
+  writeConfig(c: Config) {
+    $('species').value = c.species;
+    this.fillSelectors({ habit: c.habit, cultivar: c.cultivar });
     $('startYear').value = c.start;
     $('seed').value = c.seed;
     $('detail').value = c.detail;
-    $('system').value = system;
+    $('form').value = c.form;
+    $('practice').value = c.practice;
   }
 
   setSeed(seed: number) {
@@ -265,13 +289,36 @@ export class Ui {
     $('time').value = hour;
   }
 
-  private fillCultivars(index?: number) {
-    const sel = $('cultivar');
-    sel.replaceChildren();
-    profiles.forEach((p, i) => {
-      if (p.sp === $('species').value) sel.add(new Option(p.name, String(i)));
-    });
-    if (index !== undefined) sel.value = String(index);
+  /** Species and form lists come from the registries; habit/cultivar filter. */
+  private fillStaticSelects() {
+    const speciesSel = $('species');
+    speciesSel.replaceChildren();
+    for (const s of speciesList) speciesSel.add(new Option(s.label, s.id));
+    const formSel = $('form');
+    formSel.replaceChildren();
+    for (const f of formList) formSel.add(new Option(f.label, f.id));
+  }
+
+  /** Rebuild habit and cultivar lists for the species; keep picks when asked. */
+  private fillSelectors(pick?: { habit?: HabitId; cultivar?: string }) {
+    const sp: SpeciesId = $('species').value;
+    const hs = habitsFor(sp);
+    const habitSel = $('habit');
+    habitSel.replaceChildren();
+    for (const h of hs) habitSel.add(new Option(h.label, h.id));
+    const habitId: HabitId =
+      pick?.habit && hs.some((h) => h.id === pick.habit)
+        ? pick.habit
+        : hs[0].id;
+    habitSel.value = habitId;
+    const cs = cultivarsFor(sp);
+    const cultivarSel = $('cultivar');
+    cultivarSel.replaceChildren();
+    for (const c of cs) cultivarSel.add(new Option(c.label, c.id));
+    cultivarSel.value =
+      pick?.cultivar && cs.some((c) => c.id === pick.cultivar)
+        ? pick.cultivar
+        : defaultCultivar(sp, habitId).id;
   }
 
   private setTab(key: string) {

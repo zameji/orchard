@@ -547,14 +547,9 @@
             <div class="eyebrow">Planting card</div>
             <h2>Set up a specimen</h2>
             <div class="formGrid">
-              <label
-                >Species<select id="species">
-                  <option>Apple</option>
-                  <option>Cherry</option>
-                  <option>Peach</option>
-                </select></label
-              >
-              <label>Growth habit<select id="cultivar"></select></label>
+              <label>Species<select id="species"></select></label>
+              <label>Bearing habit<select id="habit"></select></label>
+              <label>Cultivar<select id="cultivar"></select></label>
               <label>Starting year<select id="startYear"></select></label>
               <label
                 >Unsigned seed<input
@@ -618,9 +613,10 @@
             <div class="row">
               <button id="learn">Learn mode: Off</button
               ><label style="flex: 1"
-                >Training system<select id="system">
-                  <option value="leader">Central leader / spindle</option>
-                  <option value="vase">Open center / vase</option>
+                >Training form<select id="form"></select></label
+              ><label style="flex: 1"
+                >Practice<select id="practice">
+                  <option value="normal">Standard training</option>
                   <option value="renovate">
                     Neglected tree · 3-year renovation
                   </option>

@@ -1,16 +1,8 @@
 import { clamp } from '../util.js';
-import { budget } from './config.js';
 import { Canopy } from './model.js';
 import type { Tree } from './tree.js';
-import type {
-  Branch,
-  CutPlan,
-  Grade,
-  Model,
-  Profile,
-  TrainingSystem,
-  TreeState,
-} from './types.js';
+import type { TreeSpec } from './axes.js';
+import type { Branch, CutPlan, Grade, Model, TreeState } from './types.js';
 
 export const partNames = [
   'Light gain',
@@ -23,7 +15,7 @@ export const partNames = [
 export class CutPlanner {
   constructor(
     private readonly t: Tree,
-    private readonly profile: Profile,
+    private readonly spec: TreeSpec,
   ) {}
 
   /** Non-mutating hypothetical cut: forked tree plus derived model. */
@@ -37,7 +29,7 @@ export class CutPlanner {
       lost: f.lost,
       originals: f.originals,
       after: f.after,
-      model: new Canopy(f.after, this.profile),
+      model: new Canopy(f.after, this.spec),
     };
   }
 }
@@ -46,10 +38,10 @@ export class CutPlanner {
 export class Grader {
   constructor(
     private readonly t: TreeState,
-    private readonly profile: Profile,
+    private readonly spec: TreeSpec,
   ) {}
 
-  assess(q: Branch, c: CutPlan, m: Model, system: TrainingSystem): Grade {
+  assess(q: Branch, c: CutPlan, m: Model): Grade {
     const thin = c.at === 0,
       a = c.model,
       frac = a.removal;
@@ -69,7 +61,8 @@ export class Grader {
     let structure = thin ? 3 : -9;
     if (thin && (q.narrow || q.rival)) structure += 8;
     if (thin && q.s.role === 'sprout') structure += 5;
-    if (q.s.role === 'leader' && system === 'leader') structure -= 18;
+    if (q.s.role === 'leader' && this.spec.form.id === 'leader')
+      structure -= 18;
     if (
       q.s.role === 'scaffold' &&
       q.s.fork &&
@@ -78,7 +71,7 @@ export class Grader {
       !q.bad
     )
       structure -= 9;
-    if (!thin && this.profile.sp !== 'Apple') structure -= 7;
+    if (!thin) structure -= this.spec.species.headingStructurePenalty;
     const damaged =
       c.lost.reduce((v, s) => v + (m.map.get(s.id)!.bad ? s.len : 0), 0) +
       (q.bad && c.at ? q.s.len * (1 - c.at) : 0);
@@ -100,14 +93,9 @@ export class Grader {
         42 * Math.max(0, fruitLoss) -
         22 * zoneLoss -
         (22 * c.length) / this.t.base -
-        150 * Math.max(0, frac - budget(this.profile)),
+        150 * Math.max(0, frac - this.spec.species.budget),
     );
-    if (
-      !thin &&
-      (this.profile.mode === 'tip' || this.profile.mode === 'peach') &&
-      q.age <= 1
-    )
-      balance -= 6;
+    if (!thin && q.age <= 1) balance -= this.spec.habit.youngHeadingPenalty;
     const pts = [light, structure, balance, ds],
       score = clamp(58 + pts.reduce((x, y) => x + y, 0), 0, 100);
     return { pts, score, delta: a.score - m.score, lg };
