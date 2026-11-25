@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { profiles } from '../src/js/sim/config.js';
 import { Canopy } from '../src/js/sim/model.js';
 import { Tree } from '../src/js/sim/tree.js';
-import { assertInvariants, caps, growYears, plant } from './helpers.js';
+import {
+  assertInvariants,
+  caps,
+  growYears,
+  plant,
+  specs,
+} from './helpers.js';
 
 describe('Tree', () => {
   it('plants a single rooted leader in year 1', () => {
@@ -26,29 +31,29 @@ describe('Tree', () => {
 });
 
 describe('growth', () => {
-  it('keeps structural invariants across profiles, seeds and years', () => {
-    for (const profile of profiles)
+  it('keeps structural invariants across specs, seeds and years', () => {
+    for (const spec of Object.values(specs))
       for (const seed of [1, 74129, 4294967295]) {
         const t = new Tree(seed);
         t.base = t.edges[0].len;
         for (let y = 0; y < 8; y++) {
-          t.advance(new Canopy(t, profile), profile, caps.medium);
+          t.advance(new Canopy(t, spec), spec, caps.medium);
           assertInvariants(t, caps.medium);
         }
       }
   });
 
   it('is fully deterministic for a fixed scenario', () => {
-    const a = plant(74129, profiles[0], 5);
-    const b = plant(74129, profiles[0], 5);
+    const a = plant(74129, specs.appleSpur, 5);
+    const b = plant(74129, specs.appleSpur, 5);
     expect(JSON.stringify(a.t.edges)).toBe(JSON.stringify(b.t.edges));
     expect(a.m.score).toBe(b.m.score);
     expect(a.m.fruitCount).toBe(b.m.fruitCount);
   });
 
   it('produces a different tree for a different seed', () => {
-    const a = plant(1, profiles[0], 5);
-    const b = plant(2, profiles[0], 5);
+    const a = plant(1, specs.appleSpur, 5);
+    const b = plant(2, specs.appleSpur, 5);
     expect(JSON.stringify(a.t.edges)).not.toBe(JSON.stringify(b.t.edges));
   });
 
@@ -56,13 +61,13 @@ describe('growth', () => {
     const t = new Tree(74129);
     t.base = t.edges[0].len;
     for (let y = 0; y < 12; y++)
-      t.advance(new Canopy(t, profiles[0]), profiles[0], caps.low);
+      t.advance(new Canopy(t, specs.appleSpur), specs.appleSpur, caps.low);
     expect(t.edges.length).toBeLessThanOrEqual(caps.low.max);
     assertInvariants(t, caps.low);
   });
 
   it('matches golden metrics for the default planting card', () => {
-    const { t, m } = plant(74129, profiles[0], 5);
+    const { t, m } = plant(74129, specs.appleSpur, 5);
     expect(t.year).toBe(5);
     expect(t.edges.length).toBe(57);
     expect(m.score).toBe(49);
@@ -73,8 +78,8 @@ describe('growth', () => {
   });
 
   it('keeps golden metrics stable through year advance', () => {
-    const { t } = plant(74129, profiles[0], 5);
-    const m = growYears(t, profiles[0], 3);
+    const { t } = plant(74129, specs.appleSpur, 5);
+    const m = growYears(t, specs.appleSpur, 3);
     expect(t.year).toBe(8);
     expect(t.edges.length).toBe(162);
     expect(m.score).toBe(49);
@@ -83,10 +88,10 @@ describe('growth', () => {
   });
 
   it('keeps cherry and peach golden metrics', () => {
-    const c = plant(74129, profiles[3], 5);
+    const c = plant(74129, specs.cherrySweet, 5);
     expect(c.m.score).toBe(51);
     expect(c.m.fruitCount).toBe(3);
-    const p = plant(74129, profiles[5], 5);
+    const p = plant(74129, specs.peachRenewal, 5);
     expect(p.m.score).toBe(62);
     expect(p.m.fruitCount).toBe(41);
   });
@@ -94,20 +99,20 @@ describe('growth', () => {
 
 describe('stress and regrowth', () => {
   it('flags stress when fruit load passes the spur threshold', () => {
-    const { t, m } = plant(74129, profiles[0], 6);
+    const { t, m } = plant(74129, specs.appleSpur, 6);
     const load = m.fruitCount / Math.max(1, m.live);
-    growYears(t, profiles[0], 1);
+    growYears(t, specs.appleSpur, 1);
     if (load > 0.78) expect(t.stress).toBeGreaterThan(0);
     else expect(t.stress).toBe(0);
   });
 
   it('sprouts watersprouts after a heading cut', () => {
-    const { t } = plant(74129, profiles[0], 5);
+    const { t } = plant(74129, specs.appleSpur, 5);
     const target = t.edges.find((e) => e.role === 'scaffold')!;
     expect(target).toBeTruthy();
     target.head = t.year;
     const before = t.edges.length;
-    const m = growYears(t, profiles[0], 1);
+    const m = growYears(t, specs.appleSpur, 1);
     expect(t.edges.length).toBeGreaterThan(before);
     expect(
       t.edges.filter((e) => e.role === 'sprout' && e.born === t.year),

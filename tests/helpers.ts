@@ -1,37 +1,48 @@
 import { expect } from 'vitest';
-import { caps } from '../src/js/sim/config.js';
+import { caps } from '../src/js/sim/caps.js';
 import { Canopy } from '../src/js/sim/model.js';
+import { resolve } from '../src/js/sim/spec.js';
 import { Tree } from '../src/js/sim/tree.js';
-import type { Caps, Profile, TreeState } from '../src/js/sim/types.js';
+import type { TreeSpec } from '../src/js/sim/axes.js';
+import type { Caps, TreeState } from '../src/js/sim/types.js';
 
 export { caps };
+
+/** The six classic configurations, one per historic profile row. */
+export const specs = {
+  appleSpur: resolve('apple', 'spur', 'upright', 'leader'),
+  appleTip: resolve('apple', 'tip', 'spreading', 'vase'),
+  appleMixed: resolve('apple', 'mixed', 'vigorous', 'leader'),
+  cherrySweet: resolve('cherry', 'sweet', 'upright', 'leader'),
+  cherryTart: resolve('cherry', 'tart', 'bush', 'vase'),
+  peachRenewal: resolve('peach', 'renewal', 'standard', 'vase'),
+};
 
 /** Mirrors studio plant(): grow to `start` completed seasons, then derive. */
 export function plant(
   seed: number,
-  profile: Profile,
+  spec: TreeSpec,
   start: number,
   cap: Caps = caps.medium,
 ): { t: Tree; m: Canopy } {
   const t = new Tree(seed);
   t.base = t.edges[0].len;
-  for (let i = 1; i < start; i++)
-    t.advance(new Canopy(t, profile), profile, cap);
-  const m = new Canopy(t, profile);
+  for (let i = 1; i < start; i++) t.advance(new Canopy(t, spec), spec, cap);
+  const m = new Canopy(t, spec);
   t.base = m.live;
   return { t, m };
 }
 
 export function growYears(
   t: Tree,
-  profile: Profile,
+  spec: TreeSpec,
   years: number,
   cap: Caps = caps.medium,
 ): Canopy {
-  let m: Canopy = new Canopy(t, profile);
+  let m: Canopy = new Canopy(t, spec);
   for (let i = 0; i < years; i++) {
-    t.advance(m, profile, cap);
-    m = new Canopy(t, profile);
+    t.advance(m, spec, cap);
+    m = new Canopy(t, spec);
   }
   return m;
 }

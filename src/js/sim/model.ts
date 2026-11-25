@@ -1,68 +1,74 @@
 import { DEG, TAU, V, clamp } from '../util.js';
-import { budget } from './config.js';
 import { exposures, seasonSuns } from './light.js';
 import { noise } from './random.js';
-import type { Branch, Model, Profile, TreeState } from './types.js';
+import type { Habit, TreeSpec } from './axes.js';
+import type { Branch, Model, TreeState } from './types.js';
 
-function potential(q: Branch, profile: Profile) {
+/** Year-one shoot potential from the habit's shape rules. */
+function yearOneShoot(h: Habit, terminal: boolean, len: number) {
+  const s = h.shootOne;
+  switch (s.kind) {
+    case 'always':
+      return s.v;
+    case 'short':
+      return len < s.limit ? s.short : s.long;
+    case 'terminal':
+      return terminal ? s.terminal : s.lateral;
+  }
+}
+
+function potential(q: Branch, spec: TreeSpec) {
   const a = q.age,
-    m = profile.mode,
+    h = spec.habit,
     side = q.s.order > 0;
   if (q.s.dead || !side) return { sp: 0, shoot: 0 };
-  const good = a >= 2 && a <= (m === 'sweet' ? 5 : 4),
+  const good = a >= 2 && a <= h.spurGoodMaxAge,
     old = a >= 2;
-  let sp = 0,
-    shoot = 0;
-  if (old && m !== 'peach') {
-    const intensity = {
-      spur: 1,
-      tip: 0.1,
-      mixed: 0.62,
-      sweet: 0.94,
-      tart: 0.48,
-      peach: 0,
-    }[m];
-    sp = intensity * (good ? 1 : Math.max(0.1, 0.56 - (a - 5) * 0.09));
-  }
+  const sp = old
+    ? h.spurIntensity * (good ? 1 : Math.max(0.1, 0.56 - (a - 5) * 0.09))
+    : 0;
+  let shoot = 0;
   if (a === 1) {
     const terminal = !q.kids.some((k) => k.s.at > 0.955);
-    if (m === 'peach') shoot = 1;
-    else if (m === 'tip') shoot = terminal ? 1 : 0.04;
-    else if (m === 'tart') shoot = terminal ? 0.93 : 0.36;
-    else if (m === 'mixed') shoot = terminal ? 0.76 : 0.1;
-    else if (m === 'sweet') shoot = q.s.len < 0.35 ? 0.46 : 0.08;
-    else shoot = terminal ? 0.1 : 0;
+    shoot = yearOneShoot(h, terminal, q.s.len);
   }
   return { sp, shoot };
 }
 
-function crop(q: Branch, t: TreeState, profile: Profile) {
+/** Fruit-borne stations along a shoot: fixed or scaled by length. */
+function shootStations(h: Habit, len: number) {
+  const s = h.shootStations;
+  return s.kind === 'perLength'
+    ? Math.max(s.min, Math.round(len * s.perM))
+    : s.n;
+}
+
+/** Where the habit places its shoot-borne stations. */
+function shootAt(h: Habit, k: number, stations: number) {
+  const p = h.shootPlacement;
+  if (p.kind === 'spread') return p.base + (p.span * (k + 0.5)) / stations;
+  return p.kind === 'firstAt' && k === 0 ? p.at : 1;
+}
+
+function crop(q: Branch, t: TreeState, spec: TreeSpec) {
   q.buds = [];
   q.fruits = [];
   q.diameter = 0;
-  const f = potential(q, profile);
+  const f = potential(q, spec);
   q.potential = f.sp + f.shoot;
   if (!q.potential) return;
-  const m = profile.mode,
-    ch = profile.sp === 'Cherry',
-    pe = profile.sp === 'Peach';
-  const ripe = t.year >= (pe ? 2 : 3);
+  const h = spec.habit,
+    spRec = spec.species;
+  const ripe = t.year >= spRec.bearingYear;
   // Spur locations depend on identity, not the order of other branches.
   const stations = f.sp
-    ? Math.max(2, Math.min(7, Math.round(q.s.len * (m === 'spur' ? 10 : 7))))
-    : pe
-      ? Math.max(2, Math.round(q.s.len * 8))
-      : m === 'tart'
-        ? 2
-        : 1;
+    ? Math.max(2, Math.min(7, Math.round(q.s.len * h.spurStationsPerM)))
+    : shootStations(h, q.s.len);
   for (let k = 0; k < stations; k++) {
     const r = (j: number) => noise(t.seed, q.s.id, 100 + k * 19 + j);
-    let at = f.sp
+    const at = f.sp
       ? 0.14 + (0.73 * (k + 0.27 + 0.42 * r(0))) / stations
-      : pe
-        ? 0.14 + (0.72 * (k + 0.5)) / stations
-        : 1;
-    if (!f.sp && m === 'tart' && k === 0) at = 0.62;
+      : shootAt(h, k, stations);
     const az = TAU * r(1),
       ex = clamp(q.light + (r(2) - 0.5) * 0.12);
     if (f.sp && r(3) < Math.min(1, f.sp + 0.13))
@@ -72,14 +78,17 @@ function crop(q: Branch, t: TreeState, profile: Profile) {
       clamp((ex - 0.17) / 0.64) *
       (0.97 - t.stress * 0.64);
     if (!ripe || ex < 0.24 || r(5) > limit) continue;
-    const count = ch
-      ? 2 + Math.floor(r(6) * 3)
-      : f.sp && m === 'spur' && r(6) > 0.71
+    const clusters = spRec.fruitClusters;
+    const count = clusters
+      ? clusters.base + Math.floor(r(6) * clusters.span)
+      : f.sp &&
+          h.doubleFruitThreshold !== undefined &&
+          r(6) > h.doubleFruitThreshold
         ? 2
         : 1;
     for (let j = 0; j < count; j++) {
       const diameter =
-        (ch ? 0.024 : pe ? 0.069 : m === 'mixed' ? 0.088 : 0.074) *
+        (h.fruitDiameter ?? spRec.fruitDiameter) *
         (0.7 + 0.31 * ex + 0.09 * r(7) - 0.027 * (count - 1));
       q.fruits.push({
         at,
@@ -165,7 +174,7 @@ export class Canopy implements Model {
   productive: number;
   removal: number;
 
-  constructor(t: TreeState, profile: Profile) {
+  constructor(t: TreeState, spec: TreeSpec) {
     const list: Branch[] = [],
       map = new Map<number, Branch>();
     for (const s of t.edges) {
@@ -209,7 +218,7 @@ export class Canopy implements Model {
       const q = list[i],
         base =
           (0.0042 + 0.004 * q.s.len + 0.0012 * Math.min(9, q.age)) *
-          profile.cal;
+          spec.cultivar.caliper;
       q.pipe += base * base;
       q.r = Math.sqrt(q.pipe);
       if (q.par) {
@@ -227,7 +236,7 @@ export class Canopy implements Model {
       const arm = Math.sqrt(Math.max(0.015, 1 - q.rest.y * q.rest.y));
       const force =
         (0.04 + 0.135 * Math.log1p(q.burden)) *
-        profile.sag *
+        spec.cultivar.sag *
         arm *
         clamp(0.019 / q.r, 0.14, 1.6) *
         clamp(q.s.len / 0.45, 0.25, 1.7);
@@ -263,11 +272,11 @@ export class Canopy implements Model {
       headings = 0;
     for (const q of list) {
       q.light = (lights[0][q.i] + 1.3 * lights[1][q.i] + lights[2][q.i]) / 3.3;
-      crop(q, t, profile);
+      crop(q, t, spec);
       fruitCount += q.fruits.length;
       diam += q.diameter;
       for (const f of q.fruits)
-        kg += (Math.PI / 6) * f.d ** 3 * (profile.sp === 'Cherry' ? 1000 : 880);
+        kg += (Math.PI / 6) * f.d ** 3 * spec.species.fruitDensity;
       q.weak = !q.s.dead && !q.kids.length && q.age >= 2 && q.light < 0.4;
       q.down = q.dir.y < -0.17;
       q.bad = q.s.dead || q.weak || q.down || q.cross || q.inward;
@@ -307,7 +316,7 @@ export class Canopy implements Model {
           23 * struct +
           18 * health +
           10 * cropIndex -
-          115 * Math.max(0, removal - budget(profile)) -
+          115 * Math.max(0, removal - spec.species.budget) -
           (24 * headings) / lightWeight,
         0,
         100,

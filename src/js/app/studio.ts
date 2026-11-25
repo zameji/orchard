@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { pct, signed } from '../util.js';
-import { caps as allCaps, budget, profiles } from '../sim/config.js';
+import { caps as allCaps } from '../sim/caps.js';
+import { resolve, withForm } from '../sim/spec.js';
+import type { PracticeMode, TrainingSystem, TreeSpec } from '../sim/axes.js';
 import { Canopy } from '../sim/model.js';
 import { Tree } from '../sim/tree.js';
 import { CutPlanner, Grader, partNames } from '../sim/plan.js';
@@ -9,9 +11,7 @@ import type {
   Caps,
   CutPlan,
   Model,
-  Profile,
   Rec,
-  TrainingSystem,
   UndoEntry,
 } from '../sim/types.js';
 import { Advisor } from './advice.js';
@@ -30,7 +30,7 @@ export interface StudioDeps {
 
 /** Simulation owner and event root: the DI root wires this in main.ts. */
 export class Studio implements UiHooks {
-  private P: Profile = profiles[0];
+  private spec!: TreeSpec;
   private C: Caps = allCaps.low;
   private config!: Config;
   private tree: Tree;
@@ -45,7 +45,7 @@ export class Studio implements UiHooks {
   private guideSun = false;
   private learning = false;
   private panOnly = false;
-  private system: TrainingSystem = 'leader';
+  private practice: PracticeMode = 'normal';
   private renovationStart = 5;
   private hour = 12;
   private readonly stage: Stage;
@@ -71,7 +71,7 @@ export class Studio implements UiHooks {
     return {
       t: this.tree,
       m: this.m,
-      profile: this.P,
+      spec: this.spec,
       caps: this.C,
       hour: this.hour,
       overlay: this.overlay,
@@ -100,7 +100,12 @@ export class Studio implements UiHooks {
   private hud() {
     this.ui.hud({
       year: 'Year ' + this.tree.year,
-      habit: this.P.sp + ' · ' + this.P.name,
+      habit:
+        this.spec.species.label +
+        ' · ' +
+        this.spec.habit.label +
+        ' · ' +
+        this.spec.cultivar.label,
       stats: `${this.m.height.toFixed(1)} m · ${this.m.fruitCount} fruit · canopy ${this.m.score}/100 · pruned ${pct(this.m.removal)}`,
       undoEnabled: !!this.undoLog.length,
       hint: this.learning
@@ -114,19 +119,19 @@ export class Studio implements UiHooks {
     this.ui.hidePreview();
     this.undoLog = [];
     this.config = { ...c };
-    this.P = profiles[c.profile];
+    this.spec = resolve(c.species, c.habit, c.cultivar, c.form);
+    this.practice = c.practice;
     this.C = allCaps[c.detail];
     this.tree = new Tree(c.seed);
     this.tree.base = this.tree.edges[0].len;
-    this.system = this.P.sys;
     this.renovationStart = c.start;
-    this.advisor = new Advisor(this.P, this.system, this.renovationStart);
-    this.ui.writeConfig(c, this.system);
+    this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
+    this.ui.writeConfig(c);
     for (let i = 1; i < c.start; i++)
-      this.tree.advance(new Canopy(this.tree, this.P), this.P, this.C);
-    this.m = new Canopy(this.tree, this.P);
+      this.tree.advance(new Canopy(this.tree, this.spec), this.spec, this.C);
+    this.m = new Canopy(this.tree, this.spec);
     this.tree.base = this.m.live;
-    this.treeMesh.resetGeometries(this.P, this.C);
+    this.treeMesh.resetGeometries(this.spec, this.C);
     this.stage.renderer.setPixelRatio(
       Math.min(devicePixelRatio || 1, this.C.dpr),
     );
@@ -136,7 +141,7 @@ export class Studio implements UiHooks {
     this.stage.fitTree(this.m);
     if (announce)
       this.ui.notice(
-        `Planted ${this.P.sp.toLowerCase()} · seed ${c.seed} · year ${this.tree.year}. ${this.P.food}`,
+        `Planted ${this.spec.species.label.toLowerCase()} · seed ${c.seed} · year ${this.tree.year}. ${this.spec.food}`,
       );
   }
 
@@ -168,8 +173,8 @@ export class Studio implements UiHooks {
       return;
     }
     this.ui.closeTab();
-    const c = new CutPlanner(this.tree, this.P).plan(q, at);
-    c.grade = new Grader(this.tree, this.P).assess(q, c, this.m, this.system);
+    const c = new CutPlanner(this.tree, this.spec).plan(q, at);
+    c.grade = new Grader(this.tree, this.spec).assess(q, c, this.m);
     this.selected = c;
     this.treeMesh.paintWood(this.selected);
     this.redrawMarkers();
@@ -180,11 +185,9 @@ export class Studio implements UiHooks {
         (reason
           ? reason + ' '
           : at
-            ? this.P.sp === 'Apple'
-              ? 'Heading trades terminal growth for upright regrowth. '
-              : 'Heading stone fruit costs renewal wood and provokes upright regrowth. '
+            ? this.spec.species.headingAdvice
             : 'A collar cut redirects growth to retained limbs. ') +
-        `${pct(c.model.removal)} of live length removed this year if confirmed (guide ${pct(budget(this.P))}). Canopy ${this.m.score} → ${c.model.score}.`,
+        `${pct(c.model.removal)} of live length removed this year if confirmed (guide ${pct(this.spec.species.budget)}). Canopy ${this.m.score} → ${c.model.score}.`,
       parts: this.formatParts(c.grade!.pts),
     });
     this.stage.viewport();
@@ -224,7 +227,7 @@ export class Studio implements UiHooks {
     if (!this.undoLog.length) return;
     this.cancelCut();
     this.tree.undo(this.undoLog.pop()!);
-    this.m = new Canopy(this.tree, this.P);
+    this.m = new Canopy(this.tree, this.spec);
     this.refresh();
     this.ui.notice(
       'Cut undone. The preceding wood, crop and canopy score are restored.',
@@ -264,15 +267,12 @@ export class Studio implements UiHooks {
     this.ui.closeTab();
     const harvest = this.m,
       year = this.tree.year;
-    const spr = this.tree.advance(this.m, this.P, this.C);
+    const spr = this.tree.advance(this.m, this.spec, this.C);
     this.undoLog = [];
-    this.m = new Canopy(this.tree, this.P);
+    this.m = new Canopy(this.tree, this.spec);
     this.refresh();
     this.stage.fitTree(this.m);
-    const zone =
-      this.P.mode === 'peach' || this.P.mode === 'tip'
-        ? 'renewal wood'
-        : 'fruiting zones';
+    const zone = this.spec.habit.yieldZoneLabel;
     this.ui.notice(
       `Y${year} harvest · ${harvest.fruitCount} fruit, ${harvest.kg.toFixed(1)} kg` +
         (harvest.fruitCount ? `, mean ${Math.round(harvest.diam)} mm.` : '.') +
@@ -349,10 +349,21 @@ export class Studio implements UiHooks {
     this.hud();
   }
 
-  onSystem(system: TrainingSystem) {
-    this.system = system;
-    if (system === 'renovate') this.renovationStart = this.tree.year;
-    this.advisor = new Advisor(this.P, this.system, this.renovationStart);
+  onForm(form: TrainingSystem) {
+    this.spec = withForm(this.spec, form);
+    this.config = { ...this.config, form };
+    this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
+    this.learning = true;
+    this.ui.pressed('learn', true, 'Learn mode: On');
+    this.recommend();
+    this.hud();
+  }
+
+  onPractice(practice: PracticeMode) {
+    this.practice = practice;
+    if (practice === 'renovate') this.renovationStart = this.tree.year;
+    this.config = { ...this.config, practice };
+    this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
     this.learning = true;
     this.ui.pressed('learn', true, 'Learn mode: On');
     this.recommend();

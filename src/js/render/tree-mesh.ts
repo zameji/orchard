@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { $, clamp, GOLD, TAU, pct } from '../util.js';
 import { noise } from '../sim/random.js';
 import { exposures, sunDir } from '../sim/light.js';
+import type { TreeSpec } from '../sim/axes.js';
 import type {
   Branch,
   Caps,
   CutPlan,
   Model,
-  Profile,
   TreeState,
 } from '../sim/types.js';
 import {
@@ -39,7 +39,7 @@ import type { Stage } from './scene.js';
 export interface RenderCtx {
   t: TreeState;
   m: Model;
-  profile: Profile;
+  spec: TreeSpec;
   caps: Caps;
   hour: number;
   overlay: boolean;
@@ -83,14 +83,14 @@ export class TreeMesh {
     this.wood = this.foliage = this.fruitMesh = this.stems = this.extra = null;
   }
 
-  resetGeometries(profile: Profile, caps: Caps) {
+  resetGeometries(spec: TreeSpec, caps: Caps) {
     this.disposeInstances();
     for (const g of [this.woodG, this.leafG, this.fruitG]) if (g) g.dispose();
+    const render = spec.species.render;
     this.woodG = new THREE.CylinderGeometry(0.72, 1, 1, caps.sides, 1, false);
-    this.leafG = leafGeometry(profile, caps);
-    this.fruitG = fruitGeometry(profile, caps);
-    fruitMat.roughness =
-      profile.sp === 'Cherry' ? 0.24 : profile.sp === 'Peach' ? 0.83 : 0.46;
+    this.leafG = leafGeometry(render, caps);
+    this.fruitG = fruitGeometry(render, caps);
+    fruitMat.roughness = render.fruitRoughness;
   }
 
   private instances(g: THREE.BufferGeometry, m: THREE.Material, count: number) {
@@ -101,7 +101,7 @@ export class TreeMesh {
   }
 
   rebuild(ctx: RenderCtx) {
-    const { t, m, profile, caps, showLeaves, showFruit } = ctx;
+    const { t, m, spec, caps, showLeaves, showFruit } = ctx;
     this.disposeInstances();
     this.pieces = [];
     for (const q of m.list)
@@ -159,8 +159,7 @@ export class TreeMesh {
       }
     }
     this.foliage = this.instances(this.leafG, leafMat, sites.length);
-    const leafHue =
-      profile.sp === 'Peach' ? 0.263 : profile.sp === 'Cherry' ? 0.302 : 0.252;
+    const leafHue = spec.species.render.leafHue;
     const n = (q: Branch, k: number) => noise(t.seed, q.s.id, k);
     for (let i = 0; i < sites.length; i++) {
       const [q, j, k] = sites[i],
@@ -195,64 +194,45 @@ export class TreeMesh {
     this.fruitMesh = this.instances(this.fruitG, fruitMat, m.fruitCount);
     this.stems = this.instances(this.woodG, stemMat, m.fruitCount);
     let ix = 0;
+    const stem = spec.species.render.fruitStem;
     for (const q of m.list)
       for (const f of q.fruits) {
-        const rad = f.d * 0.5,
-          ch = profile.sp === 'Cherry',
-          pe = profile.sp === 'Peach';
+        const rad = f.d * 0.5;
         const anchor = atPoint(q, f.at),
           side = new THREE.Vector3(Math.cos(f.az), 0, Math.sin(f.az));
         anchor.addScaledVector(side, q.r * 0.8 + (f.spur ? 0.03 : 0));
         anchor.y += f.spur ? 0.019 : 0;
         const end = anchor
           .clone()
-          .addScaledVector(side, (ch ? 0.023 : rad * 0.68) + 0.009);
-        end.y -= ch ? 0.039 + 0.018 * f.shade : 0.014;
+          .addScaledVector(side, stem.sideConst + stem.sideRadMul * rad + 0.009);
+        end.y -= stem.dropConst + stem.dropShade * f.shade;
         this.stems.setMatrixAt(
           ix,
-          stickMatrix(anchor, end, ch ? 0.00155 : 0.0021, false),
+          stickMatrix(anchor, end, stem.width, false),
         );
         obj.position.copy(end);
-        obj.position.y -= rad * (ch ? 0.92 : pe ? 0.95 : 0.73);
+        obj.position.y -= rad * stem.hang;
         obj.rotation.set(0.08 * Math.cos(f.az), f.az, 0.1 * Math.sin(f.az));
         obj.scale.set(rad, rad, rad);
         obj.updateMatrix();
         this.fruitMesh.setMatrixAt(ix, obj.matrix);
-        if (ch)
-          col.setHSL(
-            0.987 + 0.012 * f.shade,
-            0.72,
-            0.17 + 0.19 * f.ex + (profile.mode === 'tart' ? 0.056 : 0),
-            THREE.SRGBColorSpace,
-          );
-        else if (pe)
-          col.setHSL(
-            0.046 + 0.064 * f.shade,
-            0.86,
-            0.53 + 0.084 * f.ex,
-            THREE.SRGBColorSpace,
-          );
-        else if (profile.mode === 'tip')
-          col.setHSL(
-            0.196 + 0.039 * f.shade,
-            0.54,
-            0.38 + 0.092 * f.ex,
-            THREE.SRGBColorSpace,
-          );
-        else if (profile.mode === 'mixed' && f.shade < 0.57)
-          col.setHSL(
-            0.1 + 0.036 * f.shade,
-            0.52,
-            0.38 + 0.083 * f.ex,
-            THREE.SRGBColorSpace,
-          );
-        else
-          col.setHSL(
-            0.009 + 0.052 * (1 - f.ex) + 0.014 * f.shade,
-            0.6 + 0.16 * f.ex,
-            0.34 + 0.113 * f.ex,
-            THREE.SRGBColorSpace,
-          );
+        // Linear palette in (exposure, shade); evaluated in fixed term order.
+        const pal =
+          spec.habit.render.fruitPalettes.find(
+            (p) => p.maxShade === undefined || f.shade < p.maxShade,
+          ) ?? spec.habit.render.fruitPalettes[0];
+        col.setHSL(
+          pal.h.base +
+            pal.h.oneMinusEx * (1 - f.ex) +
+            pal.h.ex * f.ex +
+            pal.h.shade * f.shade,
+          pal.s.base + pal.s.ex * f.ex,
+          pal.l.base +
+            pal.l.ex * f.ex +
+            pal.l.shade * f.shade +
+            pal.l.boost,
+          THREE.SRGBColorSpace,
+        );
         this.fruitMesh.setColorAt(ix++, col);
       }
     this.fruitMesh.visible = this.stems.visible = showFruit;
