@@ -1,10 +1,10 @@
 import { clamp } from '../util.js';
 import { budget } from './config.js';
-import { derive } from './model.js';
+import { Canopy } from './model.js';
+import type { Tree } from './tree.js';
 import type {
   Branch,
   CutPlan,
-  Edge,
   Grade,
   Model,
   Profile,
@@ -19,43 +19,24 @@ export const partNames = [
   '3Ds removed',
 ];
 
-// Make a non-mutating hypothetical graph. Only children attached above
-// a heading cut are lost; lower attachments are reparameterized in place.
+/** Non-mutating hypothetical cut: forked tree plus derived model. */
 export function cutPlan(
-  t: TreeState,
+  t: Tree,
   q: Branch,
   at: number,
   profile: Profile,
 ): CutPlan {
-  const ids = new Set<number>(),
-    stack = at === 0 ? [q] : q.kids.filter((k) => k.s.at >= at);
-  while (stack.length) {
-    const k = stack.pop()!;
-    ids.add(k.s.id);
-    for (const c of k.kids) stack.push(c);
-  }
-  const edges: Edge[] = [],
-    originals: Edge[] = [],
-    lost: Edge[] = [];
-  let length = 0;
-  for (const s of t.edges) {
-    if (ids.has(s.id)) {
-      lost.push(s);
-      if (!s.dead) length += s.len;
-      continue;
-    }
-    let next = s;
-    if (s.id === q.s.id && at > 0) {
-      if (!s.dead) length += s.len * (1 - at);
-      next = { ...s, len: s.len * at, head: t.year, load: s.load * at };
-    } else if (at > 0 && s.p === q.s.id) next = { ...s, at: s.at / at };
-    else if (at === 0 && s.id === q.s.p) next = { ...s, release: t.year };
-    if (next !== s) originals.push(s);
-    edges.push(next);
-  }
-  const after = { ...t, edges, removed: t.removed + length },
-    model = derive(after, profile);
-  return { id: q.s.id, at, ids, length, lost, originals, after, model };
+  const f = t.forkCut(q, at);
+  return {
+    id: q.s.id,
+    at,
+    ids: f.ids,
+    length: f.length,
+    lost: f.lost,
+    originals: f.originals,
+    after: f.after,
+    model: new Canopy(f.after, profile),
+  };
 }
 
 export function assess(

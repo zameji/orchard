@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { profiles } from '../src/js/sim/config.js';
 import { exposures, sunDir } from '../src/js/sim/light.js';
-import { derive } from '../src/js/sim/model.js';
+import { Canopy } from '../src/js/sim/model.js';
 import { plant } from './helpers.js';
 
-describe('derive', () => {
+describe('Canopy', () => {
   it('does not mutate the tree state', () => {
     const { t } = plant(74129, profiles[0], 5);
     const snapshot = JSON.stringify(t);
-    derive(t, profiles[0]);
-    derive(t, profiles[0]);
+    void new Canopy(t, profiles[0]);
+    void new Canopy(t, profiles[0]);
     expect(JSON.stringify(t)).toBe(snapshot);
   });
 
   it('is deterministic and order-independent to read', () => {
     const { t } = plant(74129, profiles[0], 5);
-    const a = derive(t, profiles[0]),
-      b = derive(t, profiles[0]);
+    const a = new Canopy(t, profiles[0]),
+      b = new Canopy(t, profiles[0]);
     expect(a.score).toBe(b.score);
     expect(a.fruitCount).toBe(b.fruitCount);
     expect(a.list.map((q) => q.light)).toEqual(b.list.map((q) => q.light));

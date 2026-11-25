@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { profiles } from '../src/js/sim/config.js';
-import {
-  assertInvariants,
-  caps,
-  derive,
-  advance,
-  fresh,
-  growYears,
-  plant,
-} from './helpers.js';
+import { Canopy } from '../src/js/sim/model.js';
+import { Tree } from '../src/js/sim/tree.js';
+import { assertInvariants, caps, growYears, plant } from './helpers.js';
 
-describe('fresh', () => {
+describe('Tree', () => {
   it('plants a single rooted leader in year 1', () => {
-    const t = fresh(74129);
+    const t = new Tree(74129);
     expect(t.year).toBe(1);
     expect(t.edges).toHaveLength(1);
     const e = t.edges[0];
@@ -26,8 +20,8 @@ describe('fresh', () => {
   });
 
   it('is seed-deterministic', () => {
-    expect(fresh(99)).toEqual(fresh(99));
-    expect(fresh(99).edges[0].len).not.toBe(fresh(100).edges[0].len);
+    expect(new Tree(99)).toEqual(new Tree(99));
+    expect(new Tree(99).edges[0].len).not.toBe(new Tree(100).edges[0].len);
   });
 });
 
@@ -35,10 +29,10 @@ describe('growth', () => {
   it('keeps structural invariants across profiles, seeds and years', () => {
     for (const profile of profiles)
       for (const seed of [1, 74129, 4294967295]) {
-        const t = fresh(seed);
+        const t = new Tree(seed);
         t.base = t.edges[0].len;
         for (let y = 0; y < 8; y++) {
-          advance(t, derive(t, profile), profile, caps.medium);
+          t.advance(new Canopy(t, profile), profile, caps.medium);
           assertInvariants(t, caps.medium);
         }
       }
@@ -59,10 +53,10 @@ describe('growth', () => {
   });
 
   it('respects the segment cap on a low tier', () => {
-    const t = fresh(74129);
+    const t = new Tree(74129);
     t.base = t.edges[0].len;
     for (let y = 0; y < 12; y++)
-      advance(t, derive(t, profiles[0]), profiles[0], caps.low);
+      t.advance(new Canopy(t, profiles[0]), profiles[0], caps.low);
     expect(t.edges.length).toBeLessThanOrEqual(caps.low.max);
     assertInvariants(t, caps.low);
   });
