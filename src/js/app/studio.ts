@@ -3,7 +3,7 @@ import { $, clamp, pct, signed } from '../util.js';
 import { caps as allCaps, budget, profiles } from '../sim/config.js';
 import { Canopy } from '../sim/model.js';
 import { Tree } from '../sim/tree.js';
-import { assess, cutPlan, partNames } from '../sim/plan.js';
+import { CutPlanner, Grader, partNames } from '../sim/plan.js';
 import type {
   Branch,
   Caps,
@@ -198,8 +198,8 @@ function propose(q: Branch | null, at: number, reason = '') {
     return;
   }
   closeTab();
-  const c = cutPlan(T, q, at, P);
-  c.grade = assess(q, c, M, T, system, P);
+  const c = new CutPlanner(T, P).plan(q, at);
+  c.grade = new Grader(T, P).assess(q, c, M, system);
   selected = c;
   paintWood(selected);
   drawMarkers(recs, learning, selected, M);
