@@ -145,164 +145,187 @@ function findCrossings(list: Branch[]) {
   }
 }
 
-export function derive(t: TreeState, profile: Profile): Model {
-  const list: Branch[] = [],
-    map = new Map<number, Branch>();
-  for (const s of t.edges) {
-    const par = map.get(s.p);
-    const q: Branch = {
-      s,
-      par,
-      i: list.length,
-      kids: [],
-      age: t.year - s.born,
-      rest: V(...s.d),
-      pipe: 0,
-      burden: s.load || 0,
-      cross: false,
-      r: 0,
-      a: V(),
-      dir: V(),
-      b: V(),
-      mid: V(),
-      angle: 0,
-      inward: false,
-      narrow: false,
-      rival: false,
-      light: 0,
-      buds: [],
-      fruits: [],
-      diameter: 0,
-      potential: 0,
-      weak: false,
-      down: false,
-      bad: false,
-      subLive: 0,
-      subFruit: 0,
-      subCount: 0,
-    };
-    list.push(q);
-    map.set(s.id, q);
-    if (par) par.kids.push(q);
-  }
-  for (let i = list.length - 1; i >= 0; i--) {
-    const q = list[i],
-      base =
-        (0.0042 + 0.004 * q.s.len + 0.0012 * Math.min(9, q.age)) * profile.cal;
-    q.pipe += base * base;
-    q.r = Math.sqrt(q.pipe);
-    if (q.par) {
-      q.par.pipe += q.pipe * 0.91;
-      q.par.burden += q.burden * 0.83;
+/**
+ * Derived model M for one tree state. Pure derivation: construction never
+ * mutates the tree. Recompute after any state change.
+ */
+export class Canopy implements Model {
+  list: Branch[];
+  map: Map<number, Branch>;
+  height: number;
+  spread: number;
+  fruitCount: number;
+  diam: number;
+  kg: number;
+  avg: number;
+  live: number;
+  health: number;
+  score: number;
+  struct: number;
+  productive: number;
+  removal: number;
+
+  constructor(t: TreeState, profile: Profile) {
+    const list: Branch[] = [],
+      map = new Map<number, Branch>();
+    for (const s of t.edges) {
+      const par = map.get(s.p);
+      const q: Branch = {
+        s,
+        par,
+        i: list.length,
+        kids: [],
+        age: t.year - s.born,
+        rest: V(...s.d),
+        pipe: 0,
+        burden: s.load || 0,
+        cross: false,
+        r: 0,
+        a: V(),
+        dir: V(),
+        b: V(),
+        mid: V(),
+        angle: 0,
+        inward: false,
+        narrow: false,
+        rival: false,
+        light: 0,
+        buds: [],
+        fruits: [],
+        diameter: 0,
+        potential: 0,
+        weak: false,
+        down: false,
+        bad: false,
+        subLive: 0,
+        subFruit: 0,
+        subCount: 0,
+      };
+      list.push(q);
+      map.set(s.id, q);
+      if (par) par.kids.push(q);
     }
-  }
-  let height = 0,
-    spread = 0;
-  for (const q of list) {
-    q.a = q.par ? q.par.a.clone().lerp(q.par.b, q.s.at) : V();
-    q.dir = q.rest.clone();
-    if (q.par)
-      q.dir.addScaledVector(V().subVectors(q.par.dir, q.par.rest), 0.57);
-    const arm = Math.sqrt(Math.max(0.015, 1 - q.rest.y * q.rest.y));
-    const force =
-      (0.04 + 0.135 * Math.log1p(q.burden)) *
-      profile.sag *
-      arm *
-      clamp(0.019 / q.r, 0.14, 1.6) *
-      clamp(q.s.len / 0.45, 0.25, 1.7);
-    q.dir.y -= Math.min(0.83, force);
-    q.dir.normalize();
-    q.b = q.a.clone().addScaledVector(q.dir, q.s.len);
-    q.mid = q.a.clone().lerp(q.b, 0.56);
-    height = Math.max(height, q.b.y);
-    spread = Math.max(spread, 2 * Math.hypot(q.b.x, q.b.z));
-    q.angle = q.par ? Math.acos(clamp(q.dir.dot(q.par.dir), -1, 1)) / DEG : 0;
-    const rad = Math.hypot(q.mid.x, q.mid.z);
-    q.inward =
-      rad > 0.24 && q.dir.x * q.mid.x + q.dir.z * q.mid.z < -0.19 * rad;
-    q.narrow = q.s.fork && q.angle < 30;
-    q.rival =
-      q.s.order > 0 && q.dir.y > 0.92 && q.s.len > 0.29 && rad < 0.38 * height;
-  }
-  const lights = seasonSuns.map((s) => exposures(list, s));
-  findCrossings(list);
-  let fruitCount = 0,
-    diam = 0,
-    kg = 0,
-    lightSum = 0,
-    live = 0,
-    lightWeight = 0,
-    defect = 0,
-    productive = 0,
-    goodZones = 0,
-    zones = 0,
-    headings = 0;
-  for (const q of list) {
-    q.light = (lights[0][q.i] + 1.3 * lights[1][q.i] + lights[2][q.i]) / 3.3;
-    crop(q, t, profile);
-    fruitCount += q.fruits.length;
-    diam += q.diameter;
-    for (const f of q.fruits)
-      kg += (Math.PI / 6) * f.d ** 3 * (profile.sp === 'Cherry' ? 1000 : 880);
-    q.weak = !q.s.dead && !q.kids.length && q.age >= 2 && q.light < 0.4;
-    q.down = q.dir.y < -0.17;
-    q.bad = q.s.dead || q.weak || q.down || q.cross || q.inward;
-    const w = q.s.len * (q.s.order ? 1 : 0.42);
-    lightWeight += w;
-    lightSum += w * q.light;
-    live += q.s.dead ? 0 : q.s.len;
-    const flaws =
-      (q.bad ? 0.87 : 0) + (q.narrow ? 0.48 : 0) + (q.rival ? 0.5 : 0);
-    defect += w * Math.min(1.5, flaws);
-    if (q.s.head >= t.year - 1) headings += w;
-    if (q.potential) {
-      zones += q.potential;
-      goodZones += q.potential * q.light;
-      productive += q.potential * clamp((q.light - 0.2) / 0.58);
+    for (let i = list.length - 1; i >= 0; i--) {
+      const q = list[i],
+        base =
+          (0.0042 + 0.004 * q.s.len + 0.0012 * Math.min(9, q.age)) *
+          profile.cal;
+      q.pipe += base * base;
+      q.r = Math.sqrt(q.pipe);
+      if (q.par) {
+        q.par.pipe += q.pipe * 0.91;
+        q.par.burden += q.burden * 0.83;
+      }
     }
-    q.subLive = q.s.dead ? 0 : q.s.len;
-    q.subFruit = q.fruits.length;
-    q.subCount = 1;
+    let height = 0,
+      spread = 0;
+    for (const q of list) {
+      q.a = q.par ? q.par.a.clone().lerp(q.par.b, q.s.at) : V();
+      q.dir = q.rest.clone();
+      if (q.par)
+        q.dir.addScaledVector(V().subVectors(q.par.dir, q.par.rest), 0.57);
+      const arm = Math.sqrt(Math.max(0.015, 1 - q.rest.y * q.rest.y));
+      const force =
+        (0.04 + 0.135 * Math.log1p(q.burden)) *
+        profile.sag *
+        arm *
+        clamp(0.019 / q.r, 0.14, 1.6) *
+        clamp(q.s.len / 0.45, 0.25, 1.7);
+      q.dir.y -= Math.min(0.83, force);
+      q.dir.normalize();
+      q.b = q.a.clone().addScaledVector(q.dir, q.s.len);
+      q.mid = q.a.clone().lerp(q.b, 0.56);
+      height = Math.max(height, q.b.y);
+      spread = Math.max(spread, 2 * Math.hypot(q.b.x, q.b.z));
+      q.angle = q.par ? Math.acos(clamp(q.dir.dot(q.par.dir), -1, 1)) / DEG : 0;
+      const rad = Math.hypot(q.mid.x, q.mid.z);
+      q.inward =
+        rad > 0.24 && q.dir.x * q.mid.x + q.dir.z * q.mid.z < -0.19 * rad;
+      q.narrow = q.s.fork && q.angle < 30;
+      q.rival =
+        q.s.order > 0 &&
+        q.dir.y > 0.92 &&
+        q.s.len > 0.29 &&
+        rad < 0.38 * height;
+    }
+    const lights = seasonSuns.map((s) => exposures(list, s));
+    findCrossings(list);
+    let fruitCount = 0,
+      diam = 0,
+      kg = 0,
+      lightSum = 0,
+      live = 0,
+      lightWeight = 0,
+      defect = 0,
+      productive = 0,
+      goodZones = 0,
+      zones = 0,
+      headings = 0;
+    for (const q of list) {
+      q.light = (lights[0][q.i] + 1.3 * lights[1][q.i] + lights[2][q.i]) / 3.3;
+      crop(q, t, profile);
+      fruitCount += q.fruits.length;
+      diam += q.diameter;
+      for (const f of q.fruits)
+        kg += (Math.PI / 6) * f.d ** 3 * (profile.sp === 'Cherry' ? 1000 : 880);
+      q.weak = !q.s.dead && !q.kids.length && q.age >= 2 && q.light < 0.4;
+      q.down = q.dir.y < -0.17;
+      q.bad = q.s.dead || q.weak || q.down || q.cross || q.inward;
+      const w = q.s.len * (q.s.order ? 1 : 0.42);
+      lightWeight += w;
+      lightSum += w * q.light;
+      live += q.s.dead ? 0 : q.s.len;
+      const flaws =
+        (q.bad ? 0.87 : 0) + (q.narrow ? 0.48 : 0) + (q.rival ? 0.5 : 0);
+      defect += w * Math.min(1.5, flaws);
+      if (q.s.head >= t.year - 1) headings += w;
+      if (q.potential) {
+        zones += q.potential;
+        goodZones += q.potential * q.light;
+        productive += q.potential * clamp((q.light - 0.2) / 0.58);
+      }
+      q.subLive = q.s.dead ? 0 : q.s.len;
+      q.subFruit = q.fruits.length;
+      q.subCount = 1;
+    }
+    for (let i = list.length - 1; i > 0; i--) {
+      const q = list[i];
+      q.par!.subLive += q.subLive;
+      q.par!.subFruit += q.subFruit;
+      q.par!.subCount += q.subCount;
+    }
+    const avg = lightSum / Math.max(0.01, lightWeight),
+      health = zones ? goodZones / zones : avg;
+    const removal = t.removed / Math.max(0.01, t.base),
+      struct = clamp(1 - (2 * defect) / Math.max(0.01, lightWeight));
+    const cropIndex =
+      t.year < 3 ? 0.7 : clamp(productive / Math.max(1, live * 1.1));
+    const score = Math.round(
+      clamp(
+        17 +
+          31 * avg +
+          23 * struct +
+          18 * health +
+          10 * cropIndex -
+          115 * Math.max(0, removal - budget(profile)) -
+          (24 * headings) / lightWeight,
+        0,
+        100,
+      ),
+    );
+    this.list = list;
+    this.map = map;
+    this.height = height;
+    this.spread = spread;
+    this.fruitCount = fruitCount;
+    this.diam = fruitCount ? (1000 * diam) / fruitCount : 0;
+    this.kg = kg;
+    this.avg = avg;
+    this.live = live;
+    this.health = health;
+    this.score = score;
+    this.struct = struct;
+    this.productive = productive;
+    this.removal = removal;
   }
-  for (let i = list.length - 1; i > 0; i--) {
-    const q = list[i];
-    q.par!.subLive += q.subLive;
-    q.par!.subFruit += q.subFruit;
-    q.par!.subCount += q.subCount;
-  }
-  const avg = lightSum / Math.max(0.01, lightWeight),
-    health = zones ? goodZones / zones : avg;
-  const removal = t.removed / Math.max(0.01, t.base),
-    struct = clamp(1 - (2 * defect) / Math.max(0.01, lightWeight));
-  const cropIndex =
-    t.year < 3 ? 0.7 : clamp(productive / Math.max(1, live * 1.1));
-  const score = Math.round(
-    clamp(
-      17 +
-        31 * avg +
-        23 * struct +
-        18 * health +
-        10 * cropIndex -
-        115 * Math.max(0, removal - budget(profile)) -
-        (24 * headings) / lightWeight,
-      0,
-      100,
-    ),
-  );
-  return {
-    list,
-    map,
-    height,
-    spread,
-    fruitCount,
-    diam: fruitCount ? (1000 * diam) / fruitCount : 0,
-    kg,
-    avg,
-    live,
-    health,
-    score,
-    struct,
-    productive,
-    removal,
-  };
 }

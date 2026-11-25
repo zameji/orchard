@@ -1,10 +1,10 @@
 import { expect } from 'vitest';
 import { caps } from '../src/js/sim/config.js';
-import { derive } from '../src/js/sim/model.js';
-import { advance, fresh } from '../src/js/sim/tree.js';
-import type { Caps, Model, Profile, TreeState } from '../src/js/sim/types.js';
+import { Canopy } from '../src/js/sim/model.js';
+import { Tree } from '../src/js/sim/tree.js';
+import type { Caps, Profile, TreeState } from '../src/js/sim/types.js';
 
-export { caps, derive, advance, fresh };
+export { caps };
 
 /** Mirrors studio plant(): grow to `start` completed seasons, then derive. */
 export function plant(
@@ -12,25 +12,26 @@ export function plant(
   profile: Profile,
   start: number,
   cap: Caps = caps.medium,
-): { t: TreeState; m: Model } {
-  const t = fresh(seed);
+): { t: Tree; m: Canopy } {
+  const t = new Tree(seed);
   t.base = t.edges[0].len;
-  for (let i = 1; i < start; i++) advance(t, derive(t, profile), profile, cap);
-  const m = derive(t, profile);
+  for (let i = 1; i < start; i++)
+    t.advance(new Canopy(t, profile), profile, cap);
+  const m = new Canopy(t, profile);
   t.base = m.live;
   return { t, m };
 }
 
 export function growYears(
-  t: TreeState,
+  t: Tree,
   profile: Profile,
   years: number,
   cap: Caps = caps.medium,
-): Model {
-  let m = derive(t, profile);
+): Canopy {
+  let m: Canopy = new Canopy(t, profile);
   for (let i = 0; i < years; i++) {
-    advance(t, m, profile, cap);
-    m = derive(t, profile);
+    t.advance(m, profile, cap);
+    m = new Canopy(t, profile);
   }
   return m;
 }

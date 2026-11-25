@@ -23,15 +23,22 @@ export interface Edge {
   release: number;
 }
 
-/** Plain-data tree state; the only mutable simulation record. */
+/** Plain-data tree state; the only mutable simulation record (class Tree). */
 export interface TreeState {
   seed: number;
   year: number;
-  next: number;
+  nextId: number;
   edges: Edge[];
   removed: number;
   base: number;
   stress: number;
+}
+
+/** Bookkeeping needed to restore a cut: what was reworked and what was lost. */
+export interface UndoEntry {
+  removed: number;
+  originals: Edge[];
+  lost: Edge[];
 }
 
 export interface Bud {
@@ -49,7 +56,7 @@ export interface Fruit {
   spur: boolean;
 }
 
-/** Per-edge derived node produced by derive(). */
+/** Per-edge derived node produced by Canopy. */
 export interface Branch {
   s: Edge;
   par: Branch | undefined;
@@ -82,7 +89,7 @@ export interface Branch {
   subCount: number;
 }
 
-/** Derived model M; recompute via derive() after any state change. */
+/** Derived model M; recompute via `new Canopy(t, profile)` after any state change. */
 export interface Model {
   list: Branch[];
   map: Map<number, Branch>;
@@ -130,6 +137,15 @@ export interface Grade {
   score: number;
   delta: number;
   lg: number;
+}
+
+/** Non-mutating hypothetical graph surgery for one cut. */
+export interface CutFork {
+  ids: Set<number>;
+  length: number;
+  lost: Edge[];
+  originals: Edge[];
+  after: TreeState;
 }
 
 /** Non-mutating hypothetical cut: forked tree plus derived model. */

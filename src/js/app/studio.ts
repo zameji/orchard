@@ -1,20 +1,19 @@
 import * as THREE from 'three';
 import { $, clamp, pct, signed } from '../util.js';
 import { caps as allCaps, budget, profiles } from '../sim/config.js';
-import { derive } from '../sim/model.js';
-import { advance, fresh } from '../sim/tree.js';
+import { Canopy } from '../sim/model.js';
+import { Tree } from '../sim/tree.js';
 import { assess, cutPlan, partNames } from '../sim/plan.js';
 import type {
   Branch,
   Caps,
   CapsKey,
   CutPlan,
-  Edge,
   Model,
   Profile,
   Rec,
   TrainingSystem,
-  TreeState,
+  UndoEntry,
 } from '../sim/types.js';
 import { guideText, recommendation, related } from './advice.js';
 import {
@@ -44,16 +43,11 @@ interface Config {
   seed: number;
   detail: CapsKey;
 }
-interface UndoEntry {
-  removed: number;
-  originals: Edge[];
-  lost: Edge[];
-}
 
 let P: Profile = profiles[0],
   C: Caps = allCaps.low,
   config: Config,
-  T: TreeState,
+  T: Tree,
   M: Model,
   selected: CutPlan | null = null,
   undoLog: UndoEntry[] = [],
@@ -145,14 +139,14 @@ function plant(c: Config, announce = true) {
   config = { ...c };
   P = profiles[c.profile];
   C = allCaps[c.detail];
-  T = fresh(c.seed);
+  T = new Tree(c.seed);
   T.base = T.edges[0].len;
   system = P.sys;
   $('system').value = system;
   renovationStart = c.start;
   writeConfig(c);
-  for (let i = 1; i < c.start; i++) advance(T, derive(T, P), P, C);
-  M = derive(T, P);
+  for (let i = 1; i < c.start; i++) T.advance(new Canopy(T, P), P, C);
+  M = new Canopy(T, P);
   T.base = M.live;
   resetGeometries(P, C);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, C.dpr));
@@ -248,7 +242,7 @@ function confirmCut() {
     originals: c.originals,
     lost: c.lost,
   });
-  T = c.after;
+  T.applyCut(c);
   M = c.model;
   selected = null;
   $('preview').hidden = true;
@@ -263,14 +257,8 @@ function confirmCut() {
 function undoCut() {
   if (!undoLog.length) return;
   cancelCut();
-  const u = undoLog.pop()!,
-    map = new Map(u.originals.map((s) => [s.id, s] as [number, Edge]));
-  T.edges = T.edges
-    .map((s) => map.get(s.id) || s)
-    .concat(u.lost)
-    .sort((a, b) => a.id - b.id);
-  T.removed = u.removed;
-  M = derive(T, P);
+  T.undo(undoLog.pop()!);
+  M = new Canopy(T, P);
   rebuild(ctx());
   notice('Cut undone. The preceding wood, crop and canopy score are restored.');
 }
@@ -355,9 +343,9 @@ $('next').onclick = () => {
   closeTab();
   const harvest = M,
     year = T.year;
-  const spr = advance(T, M, P, C);
+  const spr = T.advance(M, P, C);
   undoLog = [];
-  M = derive(T, P);
+  M = new Canopy(T, P);
   rebuild(ctx());
   fitTree(M);
   const zone =
