@@ -16,26 +16,9 @@ import type {
   UndoEntry,
 } from '../sim/types.js';
 import { Advisor } from './advice.js';
-import {
-  controls,
-  fitTree,
-  invalidate,
-  renderer,
-  updateSun,
-  viewport,
-} from '../render/scene.js';
-import {
-  drawMarkers,
-  foliage,
-  fruitMesh,
-  paintWood,
-  rebuild,
-  resetGeometries,
-  stems,
-  updateExposure,
-  type RenderCtx,
-} from '../render/tree-mesh.js';
-import { pick } from '../render/picking.js';
+import { stage } from '../render/scene.js';
+import { treeMesh, type RenderCtx } from '../render/tree-mesh.js';
+import { picker } from '../render/picking.js';
 
 interface Config {
   profile: number;
@@ -78,8 +61,8 @@ const ctx = (): RenderCtx => ({
 let noticeTimer: ReturnType<typeof setTimeout>;
 /** Rebuild mesh instances, then run the original rebuild tail. */
 function refresh() {
-  rebuild(ctx());
-  updateSun(hour, guideSun, M);
+  treeMesh.rebuild(ctx());
+  stage.updateSun(hour, guideSun, M);
   recommend();
   hud();
 }
@@ -107,7 +90,7 @@ function setTab(key: string) {
     $(b.dataset.tab!).hidden = !on;
     b.setAttribute('aria-expanded', String(on));
   }
-  viewport();
+  stage.viewport();
 }
 function closeTab() {
   setTab('');
@@ -155,12 +138,12 @@ function plant(c: Config, announce = true) {
   for (let i = 1; i < c.start; i++) T.advance(new Canopy(T, P), P, C);
   M = new Canopy(T, P);
   T.base = M.live;
-  resetGeometries(P, C);
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, C.dpr));
+  treeMesh.resetGeometries(P, C);
+  stage.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, C.dpr));
   closeTab();
   refresh();
-  viewport();
-  fitTree(M);
+  stage.viewport();
+  stage.fitTree(M);
   if (announce)
     notice(
       `Planted ${P.sp.toLowerCase()} · seed ${c.seed} · year ${T.year}. ${P.food}`,
@@ -197,7 +180,7 @@ function recommend() {
       el.append(b);
     });
   }
-  drawMarkers(recs, learning, selected, M);
+  treeMesh.drawMarkers(recs, learning, selected, M);
 }
 
 function propose(q: Branch | null, at: number, reason = '') {
@@ -209,8 +192,8 @@ function propose(q: Branch | null, at: number, reason = '') {
   const c = new CutPlanner(T, P).plan(q, at);
   c.grade = new Grader(T, P).assess(q, c, M, system);
   selected = c;
-  paintWood(selected);
-  drawMarkers(recs, learning, selected, M);
+  treeMesh.paintWood(selected);
+  treeMesh.drawMarkers(recs, learning, selected, M);
   $('cutTitle').textContent = at
     ? 'Heading · shorten shoot'
     : 'Thinning · branch collar';
@@ -232,15 +215,15 @@ function propose(q: Branch | null, at: number, reason = '') {
     box.append(s);
   });
   $('preview').hidden = false;
-  viewport();
+  stage.viewport();
 }
 function cancelCut() {
   if (!selected) return;
   selected = null;
   $('preview').hidden = true;
-  paintWood(selected);
-  drawMarkers(recs, learning, selected, M);
-  viewport();
+  treeMesh.paintWood(selected);
+  treeMesh.drawMarkers(recs, learning, selected, M);
+  stage.viewport();
 }
 function confirmCut() {
   if (!selected) return;
@@ -255,7 +238,7 @@ function confirmCut() {
   selected = null;
   $('preview').hidden = true;
   refresh();
-  viewport();
+  stage.viewport();
   notice(
     `Cut ${c.grade!.score}/100 · canopy ${signed(c.grade!.delta)} → ${M.score}. ` +
       partNames.map((s, i) => s + ' ' + signed(c.grade!.pts[i])).join(' · '),
@@ -308,7 +291,7 @@ canvas.addEventListener(
     const ok = tap && tap.id === e.pointerId && pointers.size === 1;
     pointers.delete(e.pointerId);
     tap = null;
-    if (ok && M) pick(e, { m: M, recs, learning, propose });
+    if (ok && M) picker.pick(e, { m: M, recs, learning, propose });
   },
   true,
 );
@@ -355,7 +338,7 @@ $('next').onclick = () => {
   undoLog = [];
   M = new Canopy(T, P);
   refresh();
-  fitTree(M);
+  stage.fitTree(M);
   const zone =
     P.mode === 'peach' || P.mode === 'tip' ? 'renewal wood' : 'fruiting zones';
   notice(
@@ -375,32 +358,32 @@ $('cancel').onclick = cancelCut;
 $('confirm').onclick = confirmCut;
 $('leaves').onclick = () => {
   showLeaves = !showLeaves;
-  foliage!.visible = showLeaves;
+  treeMesh.foliage!.visible = showLeaves;
   pressed('leaves', showLeaves, 'Foliage: ' + (showLeaves ? 'On' : 'Off'));
-  invalidate();
+  stage.invalidate();
 };
 $('fruit').onclick = () => {
   showFruit = !showFruit;
-  fruitMesh!.visible = stems!.visible = showFruit;
+  treeMesh.fruitMesh!.visible = treeMesh.stems!.visible = showFruit;
   pressed('fruit', showFruit, 'Fruit: ' + (showFruit ? 'On' : 'Off'));
-  invalidate();
+  stage.invalidate();
 };
 $('heat').onclick = () => {
   overlay = !overlay;
   pressed('heat', overlay);
-  updateExposure(ctx());
-  invalidate();
+  treeMesh.updateExposure(ctx());
+  stage.invalidate();
 };
 $('rays').onclick = () => {
   guideSun = !guideSun;
   pressed('rays', guideSun);
-  updateSun(hour, guideSun, M);
+  stage.updateSun(hour, guideSun, M);
 };
 function setTime(v: string | number) {
   hour = +v;
   $('time').value = hour;
-  updateSun(hour, guideSun, M);
-  updateExposure(ctx());
+  stage.updateSun(hour, guideSun, M);
+  treeMesh.updateExposure(ctx());
 }
 $('time').oninput = (e: Event) => setTime((e.target as HTMLInputElement).value);
 document
@@ -422,11 +405,13 @@ $('system').onchange = (e: Event) => {
 };
 $('pan').onclick = () => {
   panOnly = !panOnly;
-  controls.touches.ONE = panOnly ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
-  controls.mouseButtons.LEFT = panOnly ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+  stage.controls.touches.ONE = panOnly ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+  stage.controls.mouseButtons.LEFT = panOnly
+    ? THREE.MOUSE.PAN
+    : THREE.MOUSE.ROTATE;
   pressed('pan', panOnly, 'One finger: ' + (panOnly ? 'Pan' : 'Orbit'));
 };
-$('fit').onclick = () => fitTree(M);
+$('fit').onclick = () => stage.fitTree(M);
 let fallback = false;
 function fullLabel() {
   pressed(
@@ -434,7 +419,7 @@ function fullLabel() {
     !!document.fullscreenElement || fallback,
     document.fullscreenElement || fallback ? 'Exit full' : 'Fullscreen',
   );
-  viewport();
+  stage.viewport();
 }
 $('full').onclick = async () => {
   try {
