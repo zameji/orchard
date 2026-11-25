@@ -76,6 +76,13 @@ const ctx = (): RenderCtx => ({
 });
 
 let noticeTimer: ReturnType<typeof setTimeout>;
+/** Rebuild mesh instances, then run the original rebuild tail. */
+function refresh() {
+  rebuild(ctx());
+  updateSun(hour, guideSun, M);
+  recommend();
+  hud();
+}
 function notice(s: string, ms = 5000) {
   const box = $('notice');
   box.textContent = s;
@@ -151,7 +158,7 @@ function plant(c: Config, announce = true) {
   resetGeometries(P, C);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, C.dpr));
   closeTab();
-  rebuild(ctx());
+  refresh();
   viewport();
   fitTree(M);
   if (announce)
@@ -247,7 +254,7 @@ function confirmCut() {
   M = c.model;
   selected = null;
   $('preview').hidden = true;
-  rebuild(ctx());
+  refresh();
   viewport();
   notice(
     `Cut ${c.grade!.score}/100 · canopy ${signed(c.grade!.delta)} → ${M.score}. ` +
@@ -260,7 +267,7 @@ function undoCut() {
   cancelCut();
   T.undo(undoLog.pop()!);
   M = new Canopy(T, P);
-  rebuild(ctx());
+  refresh();
   notice('Cut undone. The preceding wood, crop and canopy score are restored.');
 }
 
@@ -347,7 +354,7 @@ $('next').onclick = () => {
   const spr = T.advance(M, P, C);
   undoLog = [];
   M = new Canopy(T, P);
-  rebuild(ctx());
+  refresh();
   fitTree(M);
   const zone =
     P.mode === 'peach' || P.mode === 'tip' ? 'renewal wood' : 'fruiting zones';
