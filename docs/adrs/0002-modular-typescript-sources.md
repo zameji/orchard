@@ -45,3 +45,10 @@ surface, and committed dist conflicts with a multi-file build.
 - Rejected: bundling back into one file (defeats the modular deploy surface);
   keeping committed dist (multi-file generated output would bloat every commit);
   minified emit (payload is small, opacity cost real).
+
+## Amendment (2026-11-25)
+
+`three` and `@types/three` are pinned at exact `0.187.0`, matching the import
+map, instead of the `0.169.0` named above: the pin drifted during a reinstall
+and was aligned forward to the installed version, smoke-tested in a WebGL 2
+browser.
