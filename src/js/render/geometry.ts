@@ -79,8 +79,7 @@ export function leafGeometry(render: SpeciesRender, caps: Caps) {
     const a = j * GOLD,
       dx = Math.cos(a),
       dz = Math.sin(a),
-      length =
-        render.leaf.length * (1 - (0.16 * (j % 3)) / 2);
+      length = render.leaf.length * (1 - (0.16 * (j % 3)) / 2);
     const width = length * render.leaf.widthRatio,
       rise = 0.013 + 0.012 * (j % 3);
     const base = pos.length / 3,
@@ -120,8 +119,12 @@ export function fruitGeometry(render: SpeciesRender, caps: Caps) {
       new THREE.Vector2(
         Math.max(0.0001, width),
         y * shape.yScale -
-          (y > 0 ? shape.topDimple[0] * Math.exp(-s * s * shape.topDimple[1]) : 0) +
-          (y < 0 ? shape.bottomDimple[0] * Math.exp(-s * s * shape.bottomDimple[1]) : 0),
+          (y > 0
+            ? shape.topDimple[0] * Math.exp(-s * s * shape.topDimple[1])
+            : 0) +
+          (y < 0
+            ? shape.bottomDimple[0] * Math.exp(-s * s * shape.bottomDimple[1])
+            : 0),
       ),
     );
   }

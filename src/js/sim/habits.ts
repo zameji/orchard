@@ -133,7 +133,9 @@ export const habitList: Habit[] = [
     youngAdviceGuard: 0,
     yieldZoneLabel: 'fruiting zones',
     render: {
-      fruitPalettes: [{ ...cherryFruit, l: { ...cherryFruit.l, boost: 0.056 } }],
+      fruitPalettes: [
+        { ...cherryFruit, l: { ...cherryFruit.l, boost: 0.056 } },
+      ],
     },
   },
   {

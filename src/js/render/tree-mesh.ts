@@ -3,13 +3,7 @@ import { $, clamp, GOLD, TAU, pct } from '../util.js';
 import { noise } from '../sim/random.js';
 import { exposures, sunDir } from '../sim/light.js';
 import type { TreeSpec } from '../sim/axes.js';
-import type {
-  Branch,
-  Caps,
-  CutPlan,
-  Model,
-  TreeState,
-} from '../sim/types.js';
+import type { Branch, Caps, CutPlan, Model, TreeState } from '../sim/types.js';
 import {
   atPoint,
   axisZ,
@@ -204,12 +198,12 @@ export class TreeMesh {
         anchor.y += f.spur ? 0.019 : 0;
         const end = anchor
           .clone()
-          .addScaledVector(side, stem.sideConst + stem.sideRadMul * rad + 0.009);
+          .addScaledVector(
+            side,
+            stem.sideConst + stem.sideRadMul * rad + 0.009,
+          );
         end.y -= stem.dropConst + stem.dropShade * f.shade;
-        this.stems.setMatrixAt(
-          ix,
-          stickMatrix(anchor, end, stem.width, false),
-        );
+        this.stems.setMatrixAt(ix, stickMatrix(anchor, end, stem.width, false));
         obj.position.copy(end);
         obj.position.y -= rad * stem.hang;
         obj.rotation.set(0.08 * Math.cos(f.az), f.az, 0.1 * Math.sin(f.az));
@@ -227,10 +221,7 @@ export class TreeMesh {
             pal.h.ex * f.ex +
             pal.h.shade * f.shade,
           pal.s.base + pal.s.ex * f.ex,
-          pal.l.base +
-            pal.l.ex * f.ex +
-            pal.l.shade * f.shade +
-            pal.l.boost,
+          pal.l.base + pal.l.ex * f.ex + pal.l.shade * f.shade + pal.l.boost,
           THREE.SRGBColorSpace,
         );
         this.fruitMesh.setColorAt(ix++, col);

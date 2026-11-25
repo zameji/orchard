@@ -131,7 +131,8 @@ export class Tree implements TreeState {
   advance(m: Model, spec: TreeSpec, caps: Caps): number {
     const yr = this.year + 1,
       r = mulberry32((this.seed ^ Math.imul(yr, 0x9e3779b1)) >>> 0);
-    const heavy = this.removed / Math.max(0.01, this.base) > spec.species.budget;
+    const heavy =
+      this.removed / Math.max(0.01, this.base) > spec.species.budget;
     const want: Bid[] = [];
     const bid: Growth['bid'] = (q, at, d, role, order, fork, len, priority) => {
       want.push({

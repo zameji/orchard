@@ -8,7 +8,12 @@ import { TreeMesh } from './render/tree-mesh.js';
 
 const ui = new Ui();
 const config = ui.readConfig();
-const spec = resolve(config.species, config.habit, config.cultivar, config.form);
+const spec = resolve(
+  config.species,
+  config.habit,
+  config.cultivar,
+  config.form,
+);
 const stage = new Stage();
 const treeMesh = new TreeMesh(stage);
 const studio = new Studio({

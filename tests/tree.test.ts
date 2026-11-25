@@ -2,13 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Canopy } from '../src/js/sim/model.js';
 import { withForm } from '../src/js/sim/spec.js';
 import { Tree } from '../src/js/sim/tree.js';
-import {
-  assertInvariants,
-  caps,
-  growYears,
-  plant,
-  specs,
-} from './helpers.js';
+import { assertInvariants, caps, growYears, plant, specs } from './helpers.js';
 
 describe('Tree', () => {
   it('plants a single rooted leader in year 1', () => {
@@ -104,9 +98,7 @@ describe('growth', () => {
       JSON.stringify(leader.t.edges),
     );
     // Open center: the rooted stem never extends; leader form keeps a trunk.
-    expect(
-      vase.t.edges.filter((e) => e.role === 'leader'),
-    ).toHaveLength(1);
+    expect(vase.t.edges.filter((e) => e.role === 'leader')).toHaveLength(1);
     expect(
       leader.t.edges.filter((e) => e.role === 'leader').length,
     ).toBeGreaterThan(1);
