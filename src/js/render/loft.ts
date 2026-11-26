@@ -264,14 +264,21 @@ function truncateRings(
   return { rings, cutIdx: last + 1, cutOwner: c };
 }
 
-/** Owner runs (one per edge) over the ring list, in chain order. */
-function buildRuns(rings: readonly Draft[]): Run[] {
+/**
+ * Owner runs (one per edge) over the ring list, in chain order. One run per
+ * edge, in edge order, is an invariant: emitTriangles, bandEnd and buildRanges
+ * index runs by edge ordinal, so a band that lost all its rings would
+ * misalign every later vertex and triangle range without error.
+ */
+function buildRuns(rings: readonly Draft[], m: number): Run[] {
   const runs: Run[] = [];
   for (let k = 0; k < rings.length; k++) {
     const last = runs[runs.length - 1];
     if (last && last.owner === rings[k].owner) last.end = k + 1;
     else runs.push({ owner: rings[k].owner, start: k, end: k + 1 });
   }
+  if (runs.length !== m || runs.some((run, i) => run.owner !== i))
+    throw new Error(`chainGeometry: ${runs.length} ring runs for ${m} edges`);
   return runs;
 }
 
@@ -437,7 +444,7 @@ export function chainGeometry(
   const trunc = cut ? truncateRings(segs, drafts, dirs, cut) : undefined;
   const rings = trunc ? trunc.rings : drafts;
   const frames = transport(rings, dirs);
-  const runs = buildRuns(rings);
+  const runs = buildRuns(rings, m);
   const lay = buildLayout(rings.length, sides, trunc, m);
   const { positions, normals } = emitVertices(rings, frames, lay, sides);
   const { index, stripStart } = emitTriangles(
