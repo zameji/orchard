@@ -87,6 +87,20 @@ describe('treeErrors', () => {
     expect(bad((t) => (t.edges[1].p = 2))).toContain('edges[1].p: 2');
   });
 
+  it('rejects a self-parent even before its id joins the seen set', () => {
+    expect(bad((t) => (t.edges[1].p = t.edges[1].id))).toContain('edges[1].p');
+  });
+
+  it('rejects edge ids that break the sorted-by-id order', () => {
+    expect(
+      bad((t) => {
+        const a = t.edges[1].id;
+        t.edges[1].id = t.edges[2].id;
+        t.edges[2].id = a;
+      }),
+    ).toContain('breaks the sorted-by-id order');
+  });
+
   it('rejects out-of-range geometry and length', () => {
     expect(bad((t) => (t.edges[2].at = 0))).toContain('edges[2].at: 0');
     expect(bad((t) => (t.edges[2].at = 1.2))).toContain('edges[2].at: 1.2');

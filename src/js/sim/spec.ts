@@ -5,6 +5,7 @@ import type {
   HabitId,
   Species,
   SpeciesId,
+  TrainingForm,
   TrainingSystem,
   TreeSpec,
 } from './axes.js';
@@ -36,18 +37,28 @@ export function resolve(
   cultivarId: CultivarId,
   formId: TrainingSystem,
 ): TreeSpec {
-  const spRec: Species = species[sp],
-    habit = habits[habitId],
+  // Own-property lookups: registry ids are data, never prototype keys.
+  const spRec: Species | undefined = Object.hasOwn(species, sp)
+      ? species[sp]
+      : undefined,
+    habit: Habit | undefined = Object.hasOwn(habits, habitId)
+      ? habits[habitId]
+      : undefined,
+    form: TrainingForm | undefined = Object.hasOwn(forms, formId)
+      ? forms[formId]
+      : undefined,
     cultivar = cultivarsFor(sp).find((c) => c.id === cultivarId);
-  if (!spRec || !habit || !cultivar)
-    throw new Error(`unknown tree spec: ${sp}/${habitId}/${cultivarId}`);
+  if (!spRec || !habit || !cultivar || !form)
+    throw new Error(
+      `unknown tree spec: ${sp}/${habitId}/${cultivarId}/${formId}`,
+    );
   if (!habit.species.includes(sp))
     throw new Error(`habit ${habitId} does not apply to ${sp}`);
   return {
     species: spRec,
     habit,
     cultivar,
-    form: forms[formId],
+    form,
     food: foodOf(habit, cultivar),
     naturalFit: formId === habit.naturalForm,
   };
@@ -55,9 +66,13 @@ export function resolve(
 
 /** Same tree under a different training-system form. */
 export function withForm(spec: TreeSpec, formId: TrainingSystem): TreeSpec {
+  const form: TrainingForm | undefined = Object.hasOwn(forms, formId)
+    ? forms[formId]
+    : undefined;
+  if (!form) throw new Error(`unknown training form: ${formId}`);
   return {
     ...spec,
-    form: forms[formId],
+    form,
     naturalFit: formId === spec.habit.naturalForm,
   };
 }

@@ -1,6 +1,6 @@
 import { caps } from '../sim/caps.js';
 import { resolve } from '../sim/spec.js';
-import { edgeErrors, treeErrors } from '../sim/state.js';
+import { edgeErrors, isBool, isInt, isNum, treeErrors } from '../sim/state.js';
 import type { TreeState, UndoEntry } from '../sim/types.js';
 import type { Config } from './ui.js';
 
@@ -31,11 +31,6 @@ interface Envelope {
   version: string;
   session: Session;
 }
-
-const isNum = (v: unknown): v is number =>
-  typeof v === 'number' && Number.isFinite(v);
-const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
-const isInt = (v: unknown): v is number => Number.isInteger(v);
 
 /** Serialize a session into a versioned envelope. */
 export function encodeSession(s: Session): string {
@@ -91,15 +86,56 @@ export function saveSession(s: Session): void {
 export function sessionErrors(s: unknown): string[] {
   if (typeof s !== 'object' || s === null) return ['session must be an object'];
   const c = s as Partial<Session>;
-  const err = [...configErrors(c.config), ...treeErrors(c.tree)];
+  const treeProblems = treeErrors(c.tree);
+  const err = [...configErrors(c.config), ...treeProblems];
   if (!Array.isArray(c.undoLog)) err.push('undoLog must be an array');
   else
     c.undoLog.forEach((u: unknown, i: number) =>
       err.push(...undoErrors(u, `undoLog[${i}]`)),
     );
+  if (
+    !treeProblems.length &&
+    Array.isArray(c.undoLog) &&
+    !err.some((e) => e.startsWith('undoLog'))
+  )
+    err.push(...undoCrossErrors(c.undoLog, c.tree as TreeState));
   if (!isInt(c.renovationStart) || (c.renovationStart as number) < 1)
     err.push('renovationStart must be a positive integer');
   err.push(...prefsErrors(c.prefs));
+  return err;
+}
+
+/**
+ * Undo entries reattach `lost` edges and remap `originals` by id, so their
+ * ids must stay coherent with the live tree: lost edges absent (an edge is
+ * lost at most once per log), originals never lost by an earlier cut, and
+ * every referenced id inside the allocator's range.
+ */
+function undoCrossErrors(log: UndoEntry[], t: TreeState): string[] {
+  const err: string[] = [];
+  const ids = new Set(t.edges.map((e) => e.id));
+  const gone = new Set<number>();
+  log.forEach((u, i) => {
+    for (const s of u.lost) {
+      if (ids.has(s.id) || gone.has(s.id))
+        err.push(
+          `undoLog[${i}].lost: edge ${s.id} is not absent from the tree`,
+        );
+      if (s.id >= t.nextId)
+        err.push(`undoLog[${i}].lost: edge ${s.id} exceeds nextId ${t.nextId}`);
+      gone.add(s.id);
+    }
+    for (const s of u.originals) {
+      if (gone.has(s.id))
+        err.push(
+          `undoLog[${i}].originals: edge ${s.id} was lost by an earlier cut`,
+        );
+      if (s.id >= t.nextId)
+        err.push(
+          `undoLog[${i}].originals: edge ${s.id} exceeds nextId ${t.nextId}`,
+        );
+    }
+  });
   return err;
 }
 
@@ -107,16 +143,15 @@ function configErrors(c: unknown): string[] {
   if (typeof c !== 'object' || c === null) return ['config must be an object'];
   const p = c as Partial<Config>;
   try {
-    const spec = resolve(
+    resolve(
       p.species as Config['species'],
       p.habit as Config['habit'],
       p.cultivar as Config['cultivar'],
       p.form as Config['form'],
     );
-    if (!spec.form) return ['config.form is not registered'];
   } catch {
     return [
-      `config is not a registered axis combination: ${String(p.species)}/${String(p.habit)}/${String(p.cultivar)}`,
+      `config is not a registered axis combination: ${String(p.species)}/${String(p.habit)}/${String(p.cultivar)}/${String(p.form)}`,
     ];
   }
   const err: string[] = [];
@@ -124,7 +159,7 @@ function configErrors(c: unknown): string[] {
     err.push(
       `config.practice: ${String(p.practice)} must be normal or renovate`,
     );
-  if (!(typeof p.detail === 'string' && p.detail in caps))
+  if (!(typeof p.detail === 'string' && Object.hasOwn(caps, p.detail)))
     err.push(`config.detail: ${String(p.detail)} is not a quality tier`);
   if (!isInt(p.start) || (p.start as number) < 1 || (p.start as number) > 15)
     err.push(`config.start: ${String(p.start)} must be an integer in 1..15`);

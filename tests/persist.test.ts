@@ -95,6 +95,36 @@ describe('encode/decode', () => {
     expect(decodeSession(encodeSession(e))).toBeNull();
   });
 
+  it('rejects prototype-polluting registry ids', () => {
+    const a = session();
+    (a.config as { form: string }).form = 'constructor';
+    expect(decodeSession(encodeSession(a))).toBeNull();
+    const b = session();
+    (b.config as { detail: string }).detail = '__proto__';
+    expect(decodeSession(encodeSession(b))).toBeNull();
+    const c = session();
+    (c.config as { species: string }).species = 'constructor';
+    expect(decodeSession(encodeSession(c))).toBeNull();
+    const d = session();
+    (d.config as { habit: string }).habit = '__proto__';
+    expect(decodeSession(encodeSession(d))).toBeNull();
+  });
+
+  it('rejects undo logs incoherent with the tree', () => {
+    const a = session();
+    a.undoLog[0].lost[0].id = a.tree.edges[0].id;
+    expect(decodeSession(encodeSession(a))).toBeNull();
+    const b = session();
+    b.undoLog[0].lost[0].id = 99999;
+    expect(decodeSession(encodeSession(b))).toBeNull();
+    const c = session();
+    c.undoLog[0].originals[0].id = c.undoLog[0].lost[0].id;
+    expect(decodeSession(encodeSession(c))).toBeNull();
+    const d = session();
+    d.undoLog[0].originals[0].id = 99999;
+    expect(decodeSession(encodeSession(d))).toBeNull();
+  });
+
   it('rejects corrupt undo entries and prefs', () => {
     const a = session();
     a.undoLog[0].originals[0].len = -1;

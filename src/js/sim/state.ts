@@ -2,10 +2,10 @@ import type { Edge, Role, TreeState } from './types.js';
 
 const ROLES: readonly Role[] = ['leader', 'scaffold', 'side', 'sprout'];
 
-const isNum = (v: unknown): v is number =>
+export const isNum = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v);
-const isInt = (v: unknown): v is number => Number.isInteger(v);
-const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
+export const isInt = (v: unknown): v is number => Number.isInteger(v);
+export const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 
 /**
  * Deep copy of a tree state: edge objects and direction tuples are detached,
@@ -36,9 +36,18 @@ export function treeErrors(t: unknown): string[] {
     err.push(`edges: ${String(s.edges)} must be an array`);
   } else {
     const seen = new Set<number>();
-    s.edges.forEach((e: unknown, i: number) =>
-      err.push(...edgeErrors(e, `edges[${i}]`, seen)),
-    );
+    let prev = 0;
+    s.edges.forEach((e: unknown, i: number) => {
+      err.push(...edgeErrors(e, `edges[${i}]`, seen));
+      const id = (e as Partial<Edge>)?.id;
+      if (isInt(id)) {
+        if ((id as number) <= prev)
+          err.push(
+            `edges[${i}]: id ${String(id)} breaks the sorted-by-id order`,
+          );
+        prev = id as number;
+      }
+    });
   }
   if (!isInt(s.nextId) || (s.nextId as number) < 1)
     err.push(`nextId: ${String(s.nextId)} must be a positive integer`);
