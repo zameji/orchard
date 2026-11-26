@@ -30,3 +30,8 @@ third `system` value, mixing an architecture with a correction program.
   that the same habit grows differently under the two forms.
 - Cultivars and habits stay form-agnostic; alternative-form pairings are
   first-class (the advisor labels them "an alternative form").
+- The leader-cut penalty is a form trait (`leaderCutPenalty`) and renovation
+  practice exempts it: the old three-way system select skipped the penalty
+  for `'renovate'`, and the renovation program deliberately leaves height
+  reassessment on the table. Grading the trunk cuts the renovation advisor
+  invites would contradict it, so `Grader` takes the practice mode.

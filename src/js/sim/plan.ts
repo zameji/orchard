@@ -1,7 +1,7 @@
 import { clamp } from '../util.js';
 import { Canopy } from './model.js';
 import type { Tree } from './tree.js';
-import type { TreeSpec } from './axes.js';
+import type { PracticeMode, TreeSpec } from './axes.js';
 import type { Branch, CutPlan, Grade, Model, TreeState } from './types.js';
 
 export const partNames = [
@@ -39,6 +39,7 @@ export class Grader {
   constructor(
     private readonly t: TreeState,
     private readonly spec: TreeSpec,
+    private readonly practice: PracticeMode,
   ) {}
 
   assess(q: Branch, c: CutPlan, m: Model): Grade {
@@ -61,7 +62,8 @@ export class Grader {
     let structure = thin ? 3 : -9;
     if (thin && (q.narrow || q.rival)) structure += 8;
     if (thin && q.s.role === 'sprout') structure += 5;
-    if (q.s.role === 'leader') structure -= this.spec.form.leaderCutPenalty;
+    if (q.s.role === 'leader' && this.practice === 'normal')
+      structure -= this.spec.form.leaderCutPenalty;
     if (
       q.s.role === 'scaffold' &&
       q.s.fork &&

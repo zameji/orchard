@@ -67,7 +67,7 @@ describe('Grader', () => {
     const { t, m } = plant(74129, specs.appleSpur, 5);
     const q = m.list.find((x) => x.kids.length > 0)!;
     const plan = new CutPlanner(t, specs.appleSpur).plan(q, 0);
-    const grade = new Grader(t, specs.appleSpur).assess(q, plan, m);
+    const grade = new Grader(t, specs.appleSpur, 'normal').assess(q, plan, m);
     expect(grade.pts).toHaveLength(4);
     expect(grade.score).toBeGreaterThanOrEqual(0);
     expect(grade.score).toBeLessThanOrEqual(100);
@@ -79,13 +79,29 @@ describe('Grader', () => {
     const { t, m } = plant(74129, specs.appleSpur, 5);
     const leader = m.list.find((x) => x.s.role === 'leader' && x.kids.length)!;
     const plan = new CutPlanner(t, specs.appleSpur).plan(leader, 0);
-    const grade = new Grader(t, specs.appleSpur).assess(leader, plan, m);
-    const vaseGrade = new Grader(t, withForm(specs.appleSpur, 'vase')).assess(
+    const grade = new Grader(t, specs.appleSpur, 'normal').assess(
       leader,
       plan,
       m,
     );
+    const vaseGrade = new Grader(
+      t,
+      withForm(specs.appleSpur, 'vase'),
+      'normal',
+    ).assess(leader, plan, m);
     expect(grade.pts[1]).toBe(vaseGrade.pts[1] - 18);
     expect(grade.pts[1]).toBe(-15);
+  });
+
+  it('exempts renovation from the leader-cut penalty', () => {
+    const { t, m } = plant(74129, specs.appleSpur, 5);
+    const leader = m.list.find((x) => x.s.role === 'leader' && x.kids.length)!;
+    const plan = new CutPlanner(t, specs.appleSpur).plan(leader, 0);
+    const renovate = new Grader(t, specs.appleSpur, 'renovate').assess(
+      leader,
+      plan,
+      m,
+    );
+    expect(renovate.pts[1]).toBe(3);
   });
 });
