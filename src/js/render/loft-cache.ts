@@ -218,26 +218,32 @@ export class LoftCache {
     return this.merged ? this.merged.triRanges : [];
   }
 
-  /** Copy one chain's bytes into its slot; slack stays zero and invisible. */
+  /** Copy one chain's bytes into its slot; slack stays degenerate and invisible. */
   private writeChain(k: number, g: ChainGeometry): void {
     const r = this.regions[k];
     if (g.vertexCount > r.vertCap || g.triangleCount > r.triCap)
       throw new Error(`LoftCache: chain ${k} overflowed its reservation`);
     this.positions.set(g.positions, r.vertStart * 3);
     this.normals.set(g.normals, r.vertStart * 3);
-    this.index.set(g.index, r.triStart * 3);
+    // Chain geometry indexes from its own vertex 0: rebase every index into
+    // the chain's slot, or its triangles draw over earlier chains.
+    const at = r.triStart * 3;
+    for (let i = 0; i < g.index.length; i++)
+      this.index[at + i] = g.index[i] + r.vertStart;
     const vend = (r.vertStart + r.vertCap) * 3,
       gend = (r.vertStart + g.vertexCount) * 3;
     this.positions.fill(0, gend, vend);
     this.normals.fill(0, gend, vend);
+    // Slack triangles collapse onto the chain's first vertex — degenerate
+    // and never picked.
     this.index.fill(
-      0,
+      r.vertStart,
       (r.triStart + g.triangleCount) * 3,
       (r.triStart + r.triCap) * 3,
     );
     // Ranges cover the whole slot: the slack joins the chain's last edge so
-    // the merged ranges keep partitioning the buffer exactly, and the zeroed
-    // tail triangles are degenerate and never picked.
+    // the merged ranges keep partitioning the buffer exactly, and the tail
+    // triangles reference a single vertex and are never picked.
     const vertRanges = g.vertRanges.map((x) => ({
       edgeId: x.edgeId,
       start: x.start + r.vertStart,

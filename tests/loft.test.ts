@@ -483,4 +483,30 @@ describe('loft cache', () => {
     expect(cache.applyCut(null)).not.toBeNull();
     expect(cache.applyCut(null)).toBeNull();
   });
+
+  it('draws each chain inside its own vertex block', () => {
+    const cache = new LoftCache();
+    const merged = cache.build(nodes(), 5);
+    // Chain-local indices must be rebased into each chain's slot: every
+    // triangle of an edge may only reference vertices inside the block its
+    // chain owns (its edges' ranges, reservation slack included).
+    const assertBlocks = (m: MergedLoft) => {
+      const idx = m.geometry.index!;
+      for (const r of m.triRanges) {
+        const ids = r.edgeId === 12 ? [12] : [10, 11];
+        const rs = ids.map((i) => m.vertRanges.find((x) => x.edgeId === i)!);
+        const lo = Math.min(...rs.map((x) => x.start));
+        const hi = Math.max(...rs.map((x) => x.start + x.count));
+        for (let t = r.start; t < r.start + r.count; t++)
+          for (let k = 0; k < 3; k++) {
+            const vi = idx.getX(t * 3 + k);
+            expect(vi).toBeGreaterThanOrEqual(lo);
+            expect(vi).toBeLessThan(hi);
+          }
+      }
+    };
+    assertBlocks(merged);
+    assertBlocks(cache.applyCut({ edgeId: 11, at: 0.5 })!);
+    assertBlocks(cache.applyCut(null)!);
+  });
 });

@@ -42,7 +42,11 @@ export interface Ring {
   b: THREE.Vector3;
 }
 
-/** Indexed ring-loft tube for one tip-continuation chain. */
+/**
+ * Indexed ring-loft tube for one tip-continuation chain. Index values are
+ * chain-local (0-based within the chain's own vertex block); a consumer
+ * copying into a shared buffer must rebase them by its vertex offset.
+ */
 export interface ChainGeometry {
   edgeIds: number[];
   rings: Ring[];
