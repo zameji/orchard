@@ -285,6 +285,16 @@ function truncateRings(
 }
 
 /**
+ * Reservation slack a preview rewrite can add past a base chain: truncation
+ * drops every band ring past the cut when it inserts a cut ring, so the worst
+ * rewrite is the `truncateRings` insert case — one ring's spokes plus its cap
+ * centre of vertices and the cut cap fan of triangles.
+ */
+export function previewSlack(sides: number): { verts: number; tris: number } {
+  return { verts: sides + 1, tris: sides };
+}
+
+/**
  * Seg runs (one per edge) over the ring list, in chain order. One run per
  * edge in edge order is an invariant: emitTriangles, bandEnd and buildRanges
  * index runs by edge ordinal, so a band that lost all its rings would

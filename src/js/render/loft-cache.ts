@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   chainGeometry,
   decomposeChains,
+  previewSlack,
   type ChainCut,
   type ChainGeometry,
   type LoftNode,
@@ -150,19 +151,18 @@ export class LoftCache {
     chains.forEach((chain, i) => {
       for (const q of chain) this.chainOf.set(q.s.id, i);
     });
-    // Fixed per-chain slots sized for the worst preview rewrite: truncation
-    // drops every band ring past the cut when it inserts a cut ring, so a
-    // rewrite gains at most one ring and one cap centre on the base geometry
-    // (see the insert case of `truncateRings`). Slack is folded into the
-    // chain's last edge range and kept invisible in `writeChain`.
+    // Fixed per-chain slots sized for the worst preview rewrite
+    // (`previewSlack`). Slack is folded into the chain's last edge range and
+    // kept invisible in `writeChain`.
+    const slack = previewSlack(this.sides);
     let vo = 0,
       to = 0;
     this.regions = this.baseGeoms.map((g) => {
       const region: Region = {
         vertStart: vo,
-        vertCap: g.vertexCount + this.sides + 1,
+        vertCap: g.vertexCount + slack.verts,
         triStart: to,
-        triCap: g.triangleCount + this.sides,
+        triCap: g.triangleCount + slack.tris,
       };
       vo += region.vertCap;
       to += region.triCap;
