@@ -147,6 +147,16 @@ export class TreeMesh {
     this.pieces = [];
     this.appliedCut = null;
     this.buildLoft(m, caps);
+    this.buildSprouts(m, caps);
+    this.buildFoliage(t, m, spec, caps, showLeaves);
+    this.buildFruit(m, spec, showFruit);
+    this.stage.contact.scale.setScalar(Math.max(0.85, m.spread * 1.1));
+    this.updateExposure(ctx);
+    this.stage.invalidate();
+  }
+
+  /** One instanced bud stub per bud, within the whole-tree segment budget. */
+  private buildSprouts(m: Model, caps: Caps) {
     for (const q of m.list)
       for (const b of q.buds) {
         if (this.pieces.length + m.list.length >= caps.max) break;
@@ -172,7 +182,19 @@ export class TreeMesh {
     }
     this.sprouts.instanceMatrix.needsUpdate = true;
     this.sprouts.computeBoundingSphere();
-    // Choose clusters uniformly across shoot wood if the GPU budget is full.
+  }
+
+  /**
+   * Choose clusters uniformly across shoot wood if the GPU budget is full,
+   * then place them by noise-driven station, azimuth, tilt, scale and tint.
+   */
+  private buildFoliage(
+    t: TreeState,
+    m: Model,
+    spec: TreeSpec,
+    caps: Caps,
+    showLeaves: boolean,
+  ) {
     const sites: [Branch, number, number][] = [];
     let requested = 0;
     for (const q of m.list) {
@@ -231,6 +253,10 @@ export class TreeMesh {
     }
     this.foliage.visible = showLeaves;
     this.foliage.computeBoundingSphere();
+  }
+
+  /** Fruit and stem instances, tinted by the habit's shade palette. */
+  private buildFruit(m: Model, spec: TreeSpec, showFruit: boolean) {
     this.fruitMesh = this.instances(this.fruitG, fruitMat, m.fruitCount);
     this.stems = this.instances(this.woodG, stemMat, m.fruitCount);
     let ix = 0;
@@ -275,9 +301,6 @@ export class TreeMesh {
     this.fruitMesh.visible = this.stems.visible = showFruit;
     this.fruitMesh.computeBoundingSphere();
     this.stems.computeBoundingSphere();
-    this.stage.contact.scale.setScalar(Math.max(0.85, m.spread * 1.1));
-    this.updateExposure(ctx);
-    this.stage.invalidate();
   }
 
   /** Exposure heat palette in place of bark tone. */
