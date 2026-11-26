@@ -70,7 +70,6 @@ const smooth = (x: number) => x * x * (3 - 2 * x);
 interface Draft {
   pos: THREE.Vector3;
   r: number;
-  owner: number;
   seg: number;
 }
 
@@ -81,7 +80,7 @@ interface Frame {
 }
 
 interface Run {
-  owner: number;
+  seg: number;
   start: number;
   end: number;
 }
@@ -155,7 +154,7 @@ function draftRings(segs: readonly Seg[]): {
       ? new THREE.Vector3().subVectors(joints[i + 1], p).normalize()
       : new THREE.Vector3().subVectors(p, joints[i - 1]).normalize(),
   );
-  const drafts: Draft[] = [{ pos: joints[0], r: segs[0].r, owner: 0, seg: 0 }];
+  const drafts: Draft[] = [{ pos: joints[0], r: segs[0].r, seg: 0 }];
   for (let i = 0; i < m - 1; i++) {
     const r0 = segs[i].r,
       r1 = segs[i + 1].r,
@@ -170,14 +169,12 @@ function draftRings(segs: readonly Seg[]): {
         drafts.push({
           pos: at.clone().addScaledVector(dirs[i], s),
           r: r0 + (r1 - r0) * smooth((s + w) / (2 * w)),
-          owner: i,
           seg: i,
         });
       }
       drafts.push({
         pos: at.clone(),
         r: (r0 + r1) / 2,
-        owner: i + 1,
         seg: i + 1,
       });
       for (let k = 1; k <= BLENDS; k++) {
@@ -185,18 +182,16 @@ function draftRings(segs: readonly Seg[]): {
         drafts.push({
           pos: at.clone().addScaledVector(dirs[i + 1], s),
           r: r0 + (r1 - r0) * smooth((s + w) / (2 * w)),
-          owner: i + 1,
           seg: i + 1,
         });
       }
     } else {
-      drafts.push({ pos: at.clone(), r: r1, owner: i + 1, seg: i + 1 });
+      drafts.push({ pos: at.clone(), r: r1, seg: i + 1 });
     }
   }
   drafts.push({
     pos: joints[m],
     r: segs[m - 1].r,
-    owner: m - 1,
     seg: m - 1,
   });
   return { drafts, dirs };
@@ -260,7 +255,7 @@ function truncateRings(
     d.seg === c && d.pos.clone().sub(point).dot(dirs[c]) > 1e-9;
   const rings = drafts.filter((d) => !beyond(d));
   const last = rings.reduce((acc, d, k) => (d.seg === c ? k : acc), -1);
-  const insert = { pos: point, r: segs[c].r, owner: c, seg: c };
+  const insert = { pos: point, r: segs[c].r, seg: c };
   if (last >= 0 && rings[last].pos.distanceTo(point) <= 1e-7)
     return { rings, cutIdx: last, cutOwner: c };
   rings.splice(last + 1, 0, insert);
@@ -268,7 +263,7 @@ function truncateRings(
 }
 
 /**
- * Owner runs (one per edge) over the ring list, in chain order. One run per
+ * Seg runs (one per edge) over the ring list, in chain order. One run per
  * edge, in edge order, is an invariant: emitTriangles, bandEnd and buildRanges
  * index runs by edge ordinal, so a band that lost all its rings would
  * misalign every later vertex and triangle range without error.
@@ -277,10 +272,10 @@ function buildRuns(rings: readonly Draft[], m: number): Run[] {
   const runs: Run[] = [];
   for (let k = 0; k < rings.length; k++) {
     const last = runs[runs.length - 1];
-    if (last && last.owner === rings[k].owner) last.end = k + 1;
-    else runs.push({ owner: rings[k].owner, start: k, end: k + 1 });
+    if (last && last.seg === rings[k].seg) last.end = k + 1;
+    else runs.push({ seg: rings[k].seg, start: k, end: k + 1 });
   }
-  if (runs.length !== m || runs.some((run, i) => run.owner !== i))
+  if (runs.length !== m || runs.some((run, i) => run.seg !== i))
     throw new Error(`chainGeometry: ${runs.length} ring runs for ${m} edges`);
   return runs;
 }
@@ -470,7 +465,7 @@ export function chainGeometry(
     rings: rings.map((d, k) => ({
       pos: d.pos,
       r: d.r,
-      owner: d.owner,
+      owner: d.seg,
       t: frames[k].t,
       f: frames[k].f,
       b: frames[k].b,
