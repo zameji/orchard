@@ -10,6 +10,9 @@ import type { Branch, Model } from './types.js';
 export type SpeciesId = 'apple' | 'cherry' | 'peach';
 export type HabitId = 'spur' | 'tip' | 'mixed' | 'sweet' | 'tart' | 'renewal';
 export type TrainingSystem = 'leader' | 'vase';
+/** Cultivar row ids, scoped per species in the registry lookups. */
+export type CultivarId =
+  'upright' | 'spreading' | 'vigorous' | 'bush' | 'standard';
 export type PracticeMode = 'normal' | 'renovate';
 
 /** Year-one shoot potential shape: constant, terminal-split, or length-split. */
@@ -98,7 +101,7 @@ export interface Habit {
 
 /** Cultivar: the growth-parameter set, independent of habit and form. */
 export interface Cultivar {
-  id: string;
+  id: CultivarId;
   label: string;
   note: string;
   species: SpeciesId;
