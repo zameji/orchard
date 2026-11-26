@@ -26,11 +26,15 @@ export interface Range {
   count: number;
 }
 
-/** One loft ring: centerline point, radius, owning edge index, transport frame. */
+/**
+ * One loft ring: centerline point, radius, owning segment ordinal, transport
+ * frame. `seg` is a chain-local ordinal (`Draft.seg`, `Run.seg`); global tree
+ * edge ids are spelled `edgeId` everywhere (`Range.edgeId`, `ChainCut.edgeId`).
+ */
 export interface Ring {
   pos: THREE.Vector3;
   r: number;
-  owner: number;
+  seg: number;
   t: THREE.Vector3;
   f: THREE.Vector3;
   b: THREE.Vector3;
@@ -89,14 +93,14 @@ interface Run {
 interface Trunc {
   rings: Draft[];
   cutIdx: number;
-  cutOwner: number;
+  cutSeg: number;
 }
 
 /** Vertex-buffer layout: ring blocks, cap centres, truncation shift. */
 interface Layout {
   vertexCount: number;
   cutIdx: number;
-  cutOwner: number;
+  cutSeg: number;
   cappedCut: boolean;
   cutCenter: number;
   tipCenter: number;
@@ -259,15 +263,15 @@ function truncateRings(
   const at = Math.min(Math.max(cut.at, 1e-4), 1 - 1e-4);
   const point = segs[c].a.clone().lerp(segs[c].b, at);
   if (beyondBand(drafts, dirs, c, point))
-    return { rings: drafts.slice(), cutIdx: -1, cutOwner: c };
+    return { rings: drafts.slice(), cutIdx: -1, cutSeg: c };
   const beyond = (d: Draft) => d.seg === c && isPast(d.pos, point, dirs[c]);
   const rings = drafts.filter((d) => !beyond(d));
   const last = rings.reduce((acc, d, k) => (d.seg === c ? k : acc), -1);
   const insert = { pos: point, r: segs[c].r, seg: c };
   if (last >= 0 && rings[last].pos.distanceTo(point) <= 1e-7)
-    return { rings, cutIdx: last, cutOwner: c };
+    return { rings, cutIdx: last, cutSeg: c };
   rings.splice(last + 1, 0, insert);
-  return { rings, cutIdx: last + 1, cutOwner: c };
+  return { rings, cutIdx: last + 1, cutSeg: c };
 }
 
 /**
@@ -300,13 +304,13 @@ function buildLayout(
   m: number,
 ): Layout {
   const cutIdx = trunc ? trunc.cutIdx : -1;
-  const cutOwner = trunc ? trunc.cutOwner : -1;
-  const cappedCut = cutIdx >= 0 && cutOwner < m - 1;
+  const cutSeg = trunc ? trunc.cutSeg : -1;
+  const cappedCut = cutIdx >= 0 && cutSeg < m - 1;
   const vertexCount = n * sides + 2 + (cappedCut ? 1 : 0);
   return {
     vertexCount,
     cutIdx,
-    cutOwner,
+    cutSeg,
     cappedCut,
     cutCenter: cappedCut ? 1 + (cutIdx + 1) * sides : -1,
     tipCenter: vertexCount - 1,
@@ -374,7 +378,7 @@ function bandEnd(
   lay: Layout,
 ) {
   if (i === m - 1) return n - 1;
-  if (lay.cappedCut && i === lay.cutOwner) return lay.cutIdx;
+  if (lay.cappedCut && i === lay.cutSeg) return lay.cutIdx;
   return runs[i + 1].start;
 }
 
@@ -404,7 +408,7 @@ function emitTriangles(
           c3 = lay.base(k + 1) + ((j + 1) % sides);
         index.push(a, a2, c2, a2, c3, c2);
       }
-    if (lay.cappedCut && i === lay.cutOwner)
+    if (lay.cappedCut && i === lay.cutSeg)
       pushFan(index, lay.cutCenter, lay.base(lay.cutIdx), sides, false);
   }
   pushFan(index, lay.tipCenter, lay.base(n - 1), sides, false);
@@ -473,7 +477,7 @@ export function chainGeometry(
     rings: rings.map((d, k) => ({
       pos: d.pos,
       r: d.r,
-      owner: d.seg,
+      seg: d.seg,
       t: frames[k].t,
       f: frames[k].f,
       b: frames[k].b,

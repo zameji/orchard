@@ -153,7 +153,7 @@ describe('ring loft geometry', () => {
     expect(g.vertexCount).toBe(g.rings.length * sides + 2);
     // The joint ring between edge 0 and edge 1 is referenced by triangles on
     // both sides of the joint (shared via indices, not copied).
-    const joint = g.rings.findIndex((r, k) => k > 0 && r.owner === 1);
+    const joint = g.rings.findIndex((r, k) => k > 0 && r.seg === 1);
     expect(joint).toBeGreaterThan(0);
     const below = new Set<number>(),
       above = new Set<number>();
@@ -325,12 +325,12 @@ describe('preview rewrite', () => {
     expect(cut.rings[cut.rings.length - 1].pos.distanceTo(point)).toBeLessThan(
       1e-9,
     );
-    expect(cut.rings[cut.rings.length - 1].owner).toBe(1);
+    expect(cut.rings[cut.rings.length - 1].seg).toBe(1);
     expect(cut.rings[cut.rings.length - 1].r).toBeCloseTo(0.08, 9);
     // Rings of the cut band after the cut are dropped.
     expect(
       cut.rings.filter(
-        (r) => r.owner === 1 && r.pos.clone().sub(point).dot(dir) > 1e-9,
+        (r) => r.seg === 1 && r.pos.clone().sub(point).dot(dir) > 1e-9,
       ),
     ).toHaveLength(0);
     expect(cut.vertexCount).toBeLessThan(full.vertexCount);
@@ -350,16 +350,16 @@ describe('preview rewrite', () => {
     // A ring sits at the cut point, owned by the cut edge.
     const at = cut.rings.filter((r) => r.pos.distanceTo(point) < 1e-9);
     expect(at).toHaveLength(1);
-    expect(at[0].owner).toBe(1);
+    expect(at[0].seg).toBe(1);
     // Rings after the cut within the cut band are gone...
     expect(
       cut.rings.filter(
-        (r) => r.owner === 1 && r.pos.clone().sub(point).dot(dir) > 1e-9,
+        (r) => r.seg === 1 && r.pos.clone().sub(point).dot(dir) > 1e-9,
       ),
     ).toHaveLength(0);
     // ...while the next edge's rings are kept in place.
     const kept = (rs: typeof full.rings) =>
-      rs.filter((r) => r.owner === 2).map((r) => r.pos.toArray());
+      rs.filter((r) => r.seg === 2).map((r) => r.pos.toArray());
     expect(kept(cut.rings)).toEqual(kept(full.rings));
     // One blend ring lies past the cut; the cut ring and its cap replace it.
     expect(cut.vertexCount).toBe(full.vertexCount + 1);
