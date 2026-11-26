@@ -1,6 +1,7 @@
 import type { Vector3 } from 'three';
 import { DEG, GOLD, TAU, UP, V, clamp } from '../util.js';
 import { mulberry32, noise } from './random.js';
+import { cloneState } from './state.js';
 import type { TrainingForm, TreeSpec } from './axes.js';
 import type {
   Branch,
@@ -97,6 +98,23 @@ export class Tree implements TreeState {
       false,
       1,
     );
+  }
+
+  /** Plain-data copy of the full state; safe to serialize. */
+  snapshot(): TreeState {
+    return cloneState(this);
+  }
+
+  /** Rebuild a tree from a snapshot; the state must pass `treeErrors`. */
+  static restore(s: TreeState): Tree {
+    const t = new Tree(s.seed);
+    t.year = s.year;
+    t.nextId = s.nextId;
+    t.edges = cloneState(s).edges;
+    t.removed = s.removed;
+    t.base = s.base;
+    t.stress = s.stress;
+    return t;
   }
 
   append(
