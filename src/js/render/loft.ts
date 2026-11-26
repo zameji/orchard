@@ -106,9 +106,9 @@ export function isContinuation(parent: ChainNode, child: ChainNode): boolean {
   return !child.s.fork && child.s.at > 0.95;
 }
 
-function bestContinuation(q: ChainNode): ChainNode | undefined {
-  let best: ChainNode | undefined;
-  for (const k of q.kids) {
+function bestContinuation<T extends ChainNode>(q: T): T | undefined {
+  let best: T | undefined;
+  for (const k of q.kids as T[]) {
     if (!isContinuation(q, k)) continue;
     if (!best || k.s.len > best.s.len) best = k;
   }
@@ -120,17 +120,19 @@ function bestContinuation(q: ChainNode): ChainNode | undefined {
  * longer of several tip continuations stays in the chain; the rest root
  * side chains at their own base points.
  */
-export function decomposeChains(list: readonly ChainNode[]): ChainNode[][] {
-  const cont = new Map<ChainNode, ChainNode>();
+export function decomposeChains<T extends ChainNode>(
+  list: readonly T[],
+): T[][] {
+  const cont = new Map<T, T>();
   for (const q of list) {
     const best = bestContinuation(q);
     if (best) cont.set(q, best);
   }
-  const chains: ChainNode[][] = [];
+  const chains: T[][] = [];
   for (const q of list) {
-    if (q.par && cont.get(q.par) === q) continue;
-    const chain: ChainNode[] = [];
-    for (let n: ChainNode | undefined = q; n; n = cont.get(n)) chain.push(n);
+    if (q.par && cont.get(q.par as T) === q) continue;
+    const chain: T[] = [];
+    for (let n: T | undefined = q; n; n = cont.get(n)) chain.push(n);
     chains.push(chain);
   }
   return chains;
@@ -475,6 +477,12 @@ export function chainGeometry(
 
 /** Merge per-chain lofts into one draw call with merged edge-range maps. */
 export function mergeChains(chains: readonly ChainGeometry[]): MergedLoft {
+  if (!chains.length)
+    return {
+      geometry: new THREE.BufferGeometry(),
+      vertRanges: [],
+      triRanges: [],
+    };
   const geometries = chains.map((c) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(c.positions, 3));

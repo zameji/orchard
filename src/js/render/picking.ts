@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clamp, V } from '../util.js';
 import type { Branch, Model, Rec } from '../sim/types.js';
 import { tmp } from './geometry.js';
+import { edgeAtFace } from './loft.js';
 import type { Stage } from './scene.js';
 import type { TreeMesh } from './tree-mesh.js';
 
@@ -36,6 +37,29 @@ export class Picker {
     return out;
   }
 
+  /** Merged-loft face or sprout instance to its edge and along-edge hit t. */
+  private resolveHit(
+    hit: THREE.Intersection | undefined,
+    m: Model,
+  ): { q: Branch; t: number } | null {
+    if (!hit) return null;
+    if (hit.object === this.treeMesh.wood && this.treeMesh.merged) {
+      const id = edgeAtFace(
+        this.treeMesh.merged.triRanges,
+        hit.faceIndex ?? -1,
+      );
+      const q = id !== undefined ? m.map.get(id) : undefined;
+      return q
+        ? { q, t: clamp(tmp.subVectors(hit.point, q.a).dot(q.dir) / q.s.len) }
+        : null;
+    }
+    const p =
+      hit.instanceId !== undefined
+        ? this.treeMesh.pieces[hit.instanceId]
+        : undefined;
+    return p ? { q: p.q, t: p.at } : null;
+  }
+
   pick(ev: PointerEvent, deps: PickDeps) {
     const { m, recs, learning, propose } = deps;
     const canvas = this.stage.renderer.domElement;
@@ -65,17 +89,16 @@ export class Picker {
     }
     this.ndc.set((2 * x) / w - 1, 1 - (2 * y) / h);
     this.raycaster.setFromCamera(this.ndc, this.stage.camera);
-    const hits = this.raycaster.intersectObject(this.treeMesh.wood!, false);
+    const targets: THREE.Object3D[] = [];
+    if (this.treeMesh.wood) targets.push(this.treeMesh.wood);
+    if (this.treeMesh.sprouts) targets.push(this.treeMesh.sprouts);
+    const hits = this.raycaster.intersectObjects(targets, false);
     let q: Branch | null = null,
       t = 0,
       best = Infinity;
-    if (hits.length) {
-      const p = this.treeMesh.pieces[hits[0].instanceId!];
-      q = p.q;
-      t = p.main
-        ? clamp(tmp.subVectors(hits[0].point, q.a).dot(q.dir) / q.s.len)
-        : p.at;
-    } else {
+    const direct = this.resolveHit(hits[0], m);
+    if (direct) ({ q, t } = direct);
+    if (!q) {
       for (const k of m.list) {
         this.screenPoint(k.a, this.pa, w, h);
         this.screenPoint(k.b, this.pb, w, h);

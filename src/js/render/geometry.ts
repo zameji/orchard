@@ -14,6 +14,10 @@ export const axisZ = V(0, 0, 1),
 export const coral = new THREE.Color(0xff7258);
 
 export const barkMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+export const loftMat = new THREE.MeshLambertMaterial({
+  color: 0xffffff,
+  vertexColors: true,
+});
 export const leafMat = new THREE.MeshLambertMaterial({
   color: 0xffffff,
   vertexColors: true,
