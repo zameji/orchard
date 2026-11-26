@@ -41,6 +41,9 @@ import {
 } from './loft.js';
 import type { Stage } from './scene.js';
 
+/** Flat default tone of an instanced sprout stick. */
+const SPROUT_TONE = new THREE.Color(0x796240);
+
 export interface RenderCtx {
   t: TreeState;
   m: Model;
@@ -309,6 +312,14 @@ export class TreeMesh {
     else col.copy(heatB).lerp(heatC, (e - 0.48) / 0.52);
   }
 
+  /** Heat overlay, dead grey or the caller's default tone, resolved in `col`. */
+  private tone(q: Branch, e: number, overlay: boolean, fallback: THREE.Color) {
+    if (overlay) this.heatColor(e);
+    else if (q.s.dead) col.setHex(0x817f71);
+    else col.copy(fallback);
+    return col;
+  }
+
   updateExposure(ctx: RenderCtx) {
     const { t, m, hour, overlay, selected } = ctx;
     const n = (q: Branch, k: number) => noise(t.seed, q.s.id, k);
@@ -316,26 +327,25 @@ export class TreeMesh {
     let avg = 0;
     for (const x of this.instant) avg += x;
     $('lightReading').textContent = '· mean ' + pct(avg / this.instant.length);
+    const bark = new THREE.Color();
     for (const q of m.list) {
-      const e = this.instant[q.i];
-      if (overlay) this.heatColor(e);
-      else if (q.s.dead) col.setHex(0x817f71);
-      else
-        col.setHSL(
-          0.063 + 0.014 * n(q, 90),
-          0.26 + 0.15 * Math.min(1, q.age / 4),
-          0.254 + 0.085 * n(q, 91) + 0.04 * (q.age === 0 ? 1 : 0),
-          THREE.SRGBColorSpace,
-        );
-      col.toArray(this.edgeColors, q.i * 3);
+      bark.setHSL(
+        0.063 + 0.014 * n(q, 90),
+        0.26 + 0.15 * Math.min(1, q.age / 4),
+        0.254 + 0.085 * n(q, 91) + 0.04 * (q.age === 0 ? 1 : 0),
+        THREE.SRGBColorSpace,
+      );
+      this.tone(q, this.instant[q.i], overlay, bark).toArray(
+        this.edgeColors,
+        q.i * 3,
+      );
     }
     for (let i = 0; i < this.pieces.length; i++) {
-      const { q } = this.pieces[i],
-        e = this.instant[q.i];
-      if (overlay) this.heatColor(e);
-      else if (q.s.dead) col.setHex(0x817f71);
-      else col.setHex(0x796240);
-      col.toArray(this.baseColors, i * 3);
+      const { q } = this.pieces[i];
+      this.tone(q, this.instant[q.i], overlay, SPROUT_TONE).toArray(
+        this.baseColors,
+        i * 3,
+      );
     }
     this.paintWood(selected);
   }
