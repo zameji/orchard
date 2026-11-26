@@ -18,7 +18,7 @@ export class Advisor {
     const fit =
       this.practice === 'renovate'
         ? 'Spread correction over several seasons.'
-        : this.spec.form.id === this.spec.habit.naturalForm
+        : this.spec.naturalFit
           ? 'A natural match for this habit.'
           : 'An alternative form; do not force it with large cuts.';
     const text =
@@ -30,9 +30,7 @@ export class Advisor {
               'renew aging fruiting zones and reassess height',
             ][stage(year, this.renovationStart) - 1]
           }.`
-        : this.spec.form.id === 'leader'
-          ? 'Keep one leader, stagger wide scaffolds and taper the upper crown.'
-          : 'Build a sunny bowl around three or four outward primary limbs.';
+        : this.spec.form.guide;
     return fit + ' ' + text + ' ' + this.spec.food;
   }
 
@@ -86,22 +84,14 @@ export class Advisor {
           q.age >= 4 && q.light < 0.56 ? 4 : 0,
           'Renew this aging, shaded fruiting zone in stages.',
         );
-    } else if (this.spec.form.id === 'leader') {
-      if (q.s.role === 'leader') return null;
-      add(
-        q.rival ? 7 : 0,
-        'Remove an upright competitor and keep one dominant leader.',
-      );
-      add(
-        q.mid.y > m.height * 0.65 && q.light < 0.53 ? 3 : 0,
-        'Thin crowded upper wood to keep the spindle tapered.',
-      );
     } else {
-      add(
-        q.rival || (q.inward && q.b.y > 0.45 * m.height) ? 6 : 0,
-        'Open the central bowl to light for lower fruiting shoots.',
-      );
-      if (q.s.role === 'scaffold' && q.par.s.role === 'leader') weight -= 5;
+      const { protectLeader, rules } = this.spec.form.rec;
+      if (protectLeader && q.s.role === 'leader') return null;
+      for (const r of rules) {
+        if (!r.when(q, m)) continue;
+        if (r.w > 0) add(r.w, r.msg);
+        else weight += r.w;
+      }
     }
     weight -=
       (4 * q.subFruit) / Math.max(1, m.fruitCount) + (3 * q.subLive) / m.live;

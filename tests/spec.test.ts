@@ -8,7 +8,7 @@ import {
   withForm,
 } from '../src/js/sim/spec.js';
 import { speciesList, species } from '../src/js/sim/species.js';
-import { forms } from '../src/js/sim/systems.js';
+import { formList, forms } from '../src/js/sim/systems.js';
 
 describe('tree spec resolution', () => {
   it('composes the six classic advice strings byte-identically', () => {
@@ -79,6 +79,16 @@ describe('selector filtering', () => {
 describe('registry invariants', () => {
   const speciesIds = new Set(speciesList.map((s) => s.id));
   const habitIds = new Set(habitList.map((h) => h.id));
+
+  it('keeps registry ids unique', () => {
+    expect(speciesIds.size).toBe(speciesList.length);
+    expect(habitIds.size).toBe(habitList.length);
+    expect(new Set(formList.map((f) => f.id)).size).toBe(formList.length);
+    for (const sp of speciesList) {
+      const cs = cultivarsFor(sp.id);
+      expect(new Set(cs.map((c) => c.id)).size).toBe(cs.length);
+    }
+  });
 
   it('references only known species and forms', () => {
     for (const h of habitList) {

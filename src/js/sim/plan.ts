@@ -61,8 +61,7 @@ export class Grader {
     let structure = thin ? 3 : -9;
     if (thin && (q.narrow || q.rival)) structure += 8;
     if (thin && q.s.role === 'sprout') structure += 5;
-    if (q.s.role === 'leader' && this.spec.form.id === 'leader')
-      structure -= 18;
+    if (q.s.role === 'leader') structure -= this.spec.form.leaderCutPenalty;
     if (
       q.s.role === 'scaffold' &&
       q.s.fork &&
