@@ -19,6 +19,12 @@ import type { Stage } from '../render/scene.js';
 import { type RenderCtx, type TreeMesh } from '../render/tree-mesh.js';
 import { Picker } from '../render/picking.js';
 import type { Config, Ui, UiHooks } from './ui.js';
+import {
+  loadSession,
+  saveSession,
+  type Prefs,
+  type Session,
+} from './persist.js';
 
 export interface StudioDeps {
   tree: Tree;
@@ -48,6 +54,7 @@ export class Studio implements UiHooks {
   private practice: PracticeMode = 'normal';
   private renovationStart = 5;
   private hour = 12;
+  private saveTimer?: ReturnType<typeof setTimeout>;
   private readonly stage: Stage;
   private readonly treeMesh: TreeMesh;
   private readonly ui: Ui;
@@ -64,7 +71,111 @@ export class Studio implements UiHooks {
   }
 
   boot() {
-    this.plant(this.ui.readConfig(), false);
+    window.addEventListener('pagehide', () => this.flush());
+    const saved = loadSession();
+    if (saved) this.restore(saved);
+    else this.plant(this.ui.readConfig(), false);
+  }
+
+  /** Everything a reload needs to continue; derived state is rebuilt. */
+  private session(): Session {
+    return {
+      config: this.config,
+      tree: this.tree.snapshot(),
+      undoLog: this.undoLog,
+      renovationStart: this.renovationStart,
+      prefs: {
+        leaves: this.showLeaves,
+        fruit: this.showFruit,
+        overlay: this.overlay,
+        guideSun: this.guideSun,
+        learning: this.learning,
+        panOnly: this.panOnly,
+        hour: this.hour,
+      },
+    };
+  }
+
+  /** Trailing debounce so bursts of changes (slider drags) become one write. */
+  private scheduleSave() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => this.flush(), 300);
+  }
+
+  /** Write the session now; also the pagehide safety flush. */
+  private flush() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    saveSession(this.session());
+  }
+
+  /** Continue a persisted session exactly where it left off. */
+  private restore(s: Session) {
+    this.adopt(s.config, Tree.restore(s.tree), s.undoLog, s.renovationStart);
+    this.applyPrefs(s.prefs);
+    this.derive();
+    this.scheduleSave();
+  }
+
+  /** Adopt config-derived state and a given tree; rebuild everything. */
+  private adopt(
+    c: Config,
+    tree: Tree,
+    undoLog: UndoEntry[],
+    renovationStart: number,
+  ) {
+    this.selected = null;
+    this.ui.hidePreview();
+    this.undoLog = undoLog;
+    this.config = { ...c };
+    this.spec = resolve(c.species, c.habit, c.cultivar, c.form);
+    this.practice = c.practice;
+    this.C = allCaps[c.detail];
+    this.tree = tree;
+    this.renovationStart = renovationStart;
+    this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
+    this.ui.writeConfig(c);
+  }
+
+  /** Recompute the derived model and rebuild the whole display. */
+  private derive() {
+    this.m = new Canopy(this.tree, this.spec);
+    this.treeMesh.resetGeometries(this.spec, this.C);
+    this.stage.renderer.setPixelRatio(
+      Math.min(devicePixelRatio || 1, this.C.dpr),
+    );
+    this.ui.closeTab();
+    this.refresh();
+    this.stage.viewport();
+    this.stage.fitTree(this.m);
+  }
+
+  /** Reapply display toggles and solar time from a restored session. */
+  private applyPrefs(p: Prefs) {
+    this.showLeaves = p.leaves;
+    this.showFruit = p.fruit;
+    this.overlay = p.overlay;
+    this.guideSun = p.guideSun;
+    this.learning = p.learning;
+    this.panOnly = p.panOnly;
+    this.hour = p.hour;
+    this.ui.setSlider(p.hour);
+    this.ui.pressed('leaves', p.leaves);
+    this.ui.pressed('fruit', p.fruit);
+    this.ui.pressed('heat', p.overlay);
+    this.ui.pressed('rays', p.guideSun);
+    this.ui.pressed('learn', p.learning);
+    this.ui.pressed('pan', p.panOnly);
+    this.applyPan();
+  }
+
+  private applyPan() {
+    this.stage.controls.touches.ONE = this.panOnly
+      ? THREE.TOUCH.PAN
+      : THREE.TOUCH.ROTATE;
+    this.stage.controls.mouseButtons.LEFT = this.panOnly
+      ? THREE.MOUSE.PAN
+      : THREE.MOUSE.ROTATE;
   }
 
   private ctx(): RenderCtx {
@@ -115,34 +226,18 @@ export class Studio implements UiHooks {
   }
 
   private plant(c: Config, announce = true) {
-    this.selected = null;
-    this.ui.hidePreview();
-    this.undoLog = [];
-    this.config = { ...c };
-    this.spec = resolve(c.species, c.habit, c.cultivar, c.form);
-    this.practice = c.practice;
-    this.C = allCaps[c.detail];
-    this.tree = new Tree(c.seed);
-    this.tree.base = this.tree.edges[0].len;
-    this.renovationStart = c.start;
-    this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
-    this.ui.writeConfig(c);
+    const tree = new Tree(c.seed);
+    tree.base = tree.edges[0].len;
+    this.adopt(c, tree, [], c.start);
     for (let i = 1; i < c.start; i++)
       this.tree.advance(new Canopy(this.tree, this.spec), this.spec, this.C);
-    this.m = new Canopy(this.tree, this.spec);
+    this.derive();
     this.tree.base = this.m.live;
-    this.treeMesh.resetGeometries(this.spec, this.C);
-    this.stage.renderer.setPixelRatio(
-      Math.min(devicePixelRatio || 1, this.C.dpr),
-    );
-    this.ui.closeTab();
-    this.refresh();
-    this.stage.viewport();
-    this.stage.fitTree(this.m);
     if (announce)
       this.ui.notice(
         `Planted ${this.spec.species.label.toLowerCase()} · seed ${c.seed} · year ${this.tree.year}. ${this.spec.food}`,
       );
+    this.scheduleSave();
   }
 
   private recommend() {
@@ -225,6 +320,7 @@ export class Studio implements UiHooks {
         this.formatParts(c.grade!.pts).join(' · '),
       7800,
     );
+    this.scheduleSave();
   }
 
   undoCut() {
@@ -236,6 +332,7 @@ export class Studio implements UiHooks {
     this.ui.notice(
       'Cut undone. The preceding wood, crop and canopy score are restored.',
     );
+    this.scheduleSave();
   }
 
   setTime(v: string | number) {
@@ -243,6 +340,7 @@ export class Studio implements UiHooks {
     this.ui.setSlider(this.hour);
     this.stage.updateSun(this.hour, this.guideSun, this.m);
     this.treeMesh.updateExposure(this.ctx());
+    this.scheduleSave();
   }
 
   layout() {
@@ -288,6 +386,7 @@ export class Studio implements UiHooks {
         (this.tree.stress > 0.4 ? ' Heavy crop reduced return bloom.' : ''),
       9500,
     );
+    this.scheduleSave();
   }
 
   onUndo() {
@@ -311,6 +410,7 @@ export class Studio implements UiHooks {
       'Foliage: ' + (this.showLeaves ? 'On' : 'Off'),
     );
     this.stage.invalidate();
+    this.scheduleSave();
   }
 
   onFruit() {
@@ -323,6 +423,7 @@ export class Studio implements UiHooks {
       'Fruit: ' + (this.showFruit ? 'On' : 'Off'),
     );
     this.stage.invalidate();
+    this.scheduleSave();
   }
 
   onHeat() {
@@ -330,12 +431,14 @@ export class Studio implements UiHooks {
     this.ui.pressed('heat', this.overlay);
     this.treeMesh.updateExposure(this.ctx());
     this.stage.invalidate();
+    this.scheduleSave();
   }
 
   onRays() {
     this.guideSun = !this.guideSun;
     this.ui.pressed('rays', this.guideSun);
     this.stage.updateSun(this.hour, this.guideSun, this.m);
+    this.scheduleSave();
   }
 
   onTime(value: string) {
@@ -351,6 +454,7 @@ export class Studio implements UiHooks {
     );
     this.recommend();
     this.hud();
+    this.scheduleSave();
   }
 
   onForm(form: TrainingSystem) {
@@ -373,21 +477,18 @@ export class Studio implements UiHooks {
     this.ui.pressed('learn', true, 'Learn mode: On');
     this.recommend();
     this.hud();
+    this.scheduleSave();
   }
 
   onPan() {
     this.panOnly = !this.panOnly;
-    this.stage.controls.touches.ONE = this.panOnly
-      ? THREE.TOUCH.PAN
-      : THREE.TOUCH.ROTATE;
-    this.stage.controls.mouseButtons.LEFT = this.panOnly
-      ? THREE.MOUSE.PAN
-      : THREE.MOUSE.ROTATE;
+    this.applyPan();
     this.ui.pressed(
       'pan',
       this.panOnly,
       'One finger: ' + (this.panOnly ? 'Pan' : 'Orbit'),
     );
+    this.scheduleSave();
   }
 
   onFit() {
