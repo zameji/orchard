@@ -365,18 +365,27 @@ function emitVertices(
 
 /** Cap fan winding: flip faces the cap along -t (root); default faces +t (tip, cut). */
 function pushFan(
-  index: number[],
+  index: Uint32Array,
+  at: number,
   center: number,
   ringBase: number,
   sides: number,
   flip: boolean,
-) {
+): number {
   for (let j = 0; j < sides; j++) {
     const a = ringBase + j,
       b = ringBase + ((j + 1) % sides);
-    if (flip) index.push(center, b, a);
-    else index.push(center, a, b);
+    if (flip) {
+      index[at++] = center;
+      index[at++] = b;
+      index[at++] = a;
+    } else {
+      index[at++] = center;
+      index[at++] = a;
+      index[at++] = b;
+    }
   }
+  return at;
 }
 
 /** Last ring of edge i's band: the cut ring truncates, the tip closes. */
@@ -388,29 +397,52 @@ function bandEnd(i: number, { m, n, runs, lay }: EmitCtx) {
 
 /**
  * Triangle layout: root fan, band strips in edge order with the cut fan
- * inside the cut edge's range, tip fan at the end. Returns the index buffer
- * and each band's strip start so triangle ranges stay per edge.
+ * inside the cut edge's range, tip fan at the end. The index buffer is
+ * pre-sized from the run map: root and tip fans, two triangles per emitted
+ * ring join and the optional cut fan. Returns the index buffer and each
+ * band's strip start so triangle ranges stay per edge.
  */
 function emitTriangles(ctx: EmitCtx) {
   const { m, n, sides, runs, lay } = ctx;
-  const index: number[] = [];
-  pushFan(index, 0, lay.base(0), sides, true);
+  const ends: number[] = [];
+  let joins = 0;
+  for (let i = 0; i < m; i++) {
+    const end = bandEnd(i, ctx);
+    ends.push(end);
+    joins += end - runs[i].start;
+  }
+  const triangles = sides * (2 * joins + 2 + (lay.cappedCut ? 1 : 0));
+  const index = new Uint32Array(triangles * 3);
+  let at = pushFan(index, 0, 0, lay.base(0), sides, true);
   const stripStart: number[] = [];
   for (let i = 0; i < m; i++) {
-    stripStart.push(index.length / 3);
-    const end = bandEnd(i, ctx);
-    for (let k = runs[i].start; k < end; k++)
+    stripStart.push(at / 3);
+    for (let k = runs[i].start; k < ends[i]; k++)
       for (let j = 0; j < sides; j++) {
         const a = lay.base(k) + j,
           a2 = lay.base(k) + ((j + 1) % sides),
           c2 = lay.base(k + 1) + j,
           c3 = lay.base(k + 1) + ((j + 1) % sides);
-        index.push(a, a2, c2, a2, c3, c2);
+        index[at++] = a;
+        index[at++] = a2;
+        index[at++] = c2;
+        index[at++] = a2;
+        index[at++] = c3;
+        index[at++] = c2;
       }
     if (lay.cappedCut && i === lay.cutSeg)
-      pushFan(index, lay.cutCenter, lay.base(lay.cutIdx), sides, false);
+      at = pushFan(
+        index,
+        at,
+        lay.cutCenter,
+        lay.base(lay.cutIdx),
+        sides,
+        false,
+      );
   }
-  pushFan(index, lay.tipCenter, lay.base(n - 1), sides, false);
+  at = pushFan(index, at, lay.tipCenter, lay.base(n - 1), sides, false);
+  if (at !== index.length)
+    throw new Error(`emitTriangles: ${at} of ${index.length} indices written`);
   return { index, stripStart };
 }
 
@@ -471,7 +503,7 @@ export function chainGeometry(
     })),
     positions,
     normals,
-    index: new Uint32Array(index),
+    index,
     vertRanges,
     triRanges,
     vertexCount: ctx.lay.vertexCount,
