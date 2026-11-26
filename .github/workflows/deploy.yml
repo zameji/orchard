@@ -10,27 +10,39 @@ permissions:
   pages: write
   id-token: write
 
+# One deployment at a time; never cancel an in-progress one — a cancelled
+# run can leave the Pages deployment in a broken state.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  # Build and deploy are separate jobs on purpose: the artifact metadata
+  # API is eventually consistent, so deploy-pages run in the same job as
+  # the upload can miss the "github-pages" artifact. The job boundary
+  # gives the metadata time to settle, and "re-run failed jobs" retries
+  # the deploy against the already-uploaded artifact.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
   deploy:
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
