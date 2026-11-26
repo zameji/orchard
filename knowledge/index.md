@@ -5,3 +5,4 @@ Routing to domain folders. Each folder holds `knowledge.md` (facts and patterns)
 Promote a hypothesis to a rule after 5 confirmations; demote a contradicted rule.
 
 - [git-ops](git-ops/knowledge.md) — history rewrites, identity purges, force-push safety.
+- [persistence](persistence/knowledge.md) — localStorage sessions, tree state round-trips, decode validation.
