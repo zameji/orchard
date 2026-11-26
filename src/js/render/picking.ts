@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { clamp, V } from '../util.js';
 import type { Branch, Model, Rec } from '../sim/types.js';
 import { tmp } from './geometry.js';
-import { edgeAtFace } from './loft.js';
+import { edgeAtFace } from './loft-cache.js';
 import type { Stage } from './scene.js';
 import type { TreeMesh } from './tree-mesh.js';
 

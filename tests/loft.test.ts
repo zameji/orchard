@@ -3,16 +3,18 @@ import * as THREE from 'three';
 import {
   chainGeometry,
   decomposeChains,
+  type ChainNode,
+  type LoftNode,
+  type Range,
+  type Seg,
+} from '../src/js/render/loft.js';
+import {
   edgeAtFace,
   fillEdgeColors,
   LoftCache,
   mergeChains,
-  type ChainNode,
-  type LoftNode,
   type MergedLoft,
-  type Range,
-  type Seg,
-} from '../src/js/render/loft.js';
+} from '../src/js/render/loft-cache.js';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 

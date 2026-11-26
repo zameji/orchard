@@ -29,12 +29,8 @@ import {
   stemMat,
   stickMatrix,
 } from './geometry.js';
-import {
-  fillEdgeColors,
-  LoftCache,
-  type ChainCut,
-  type MergedLoft,
-} from './loft.js';
+import type { ChainCut } from './loft.js';
+import { fillEdgeColors, LoftCache, type MergedLoft } from './loft-cache.js';
 import type { Stage } from './scene.js';
 
 /** Flat default tone of an instanced sprout stick. */

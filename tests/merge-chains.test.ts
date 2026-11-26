@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { chainGeometry, mergeChains, type Seg } from '../src/js/render/loft.js';
+import { chainGeometry, type Seg } from '../src/js/render/loft.js';
+import { mergeChains } from '../src/js/render/loft-cache.js';
 
 // Simulate a future emit phase whose chains carry inconsistent attributes,
 // the only way mergeGeometries can refuse chainGeometry-built inputs today.
