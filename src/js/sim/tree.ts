@@ -107,14 +107,7 @@ export class Tree implements TreeState {
 
   /** Rebuild a tree from a snapshot; the state must pass `treeErrors`. */
   static restore(s: TreeState): Tree {
-    const t = new Tree(s.seed);
-    t.year = s.year;
-    t.nextId = s.nextId;
-    t.edges = cloneState(s).edges;
-    t.removed = s.removed;
-    t.base = s.base;
-    t.stress = s.stress;
-    return t;
+    return Object.assign(new Tree(s.seed), cloneState(s));
   }
 
   append(
