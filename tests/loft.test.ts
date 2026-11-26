@@ -362,4 +362,19 @@ describe('preview rewrite', () => {
       cut.triRanges.map((r) => r.edgeId),
     );
   });
+
+  it('keeps the band whole when the cut is past the chain joint', () => {
+    // Continuation attached at 0.96 of its parent: the chain band ends at the
+    // joint, so a cut at 0.98 lies past it and cannot truncate the band.
+    const sides = 5;
+    const segs: Seg[] = [
+      { id: 10, a: v(0, 0, 0), b: v(0, 1, 0), r: 0.1 },
+      { id: 11, a: v(0, 0.96, 0), b: v(0.3, 1.7, 0), r: 0.08 },
+    ];
+    const full = chainGeometry(segs, sides);
+    const cut = chainGeometry(segs, sides, { edgeId: 10, at: 0.98 });
+    expect(cut.rings.length).toBe(full.rings.length);
+    expect(cut.vertexCount).toBe(full.vertexCount);
+    expect(Array.from(cut.positions)).toEqual(Array.from(full.positions));
+  });
 });

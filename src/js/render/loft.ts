@@ -222,9 +222,22 @@ function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
   return frames;
 }
 
+/** True when the cut lies past the chain band's distal joint. */
+function beyondBand(
+  drafts: readonly Draft[],
+  dirs: readonly THREE.Vector3[],
+  c: number,
+  point: THREE.Vector3,
+) {
+  const joint = drafts.find((d) => d.seg > c);
+  return !!joint && point.clone().sub(joint.pos).dot(dirs[c]) > 1e-9;
+}
+
 /**
  * Heading-preview rewrite: keep the chain up to the cut, drop the cut band's
- * rings past it and leave the later bands in place for the coral overlay.
+ * rings past it and leave the later bands in place for the coral overlay. A
+ * cut past a surviving continuation's joint lies off the band and leaves it
+ * whole (cutIdx -1).
  */
 function truncateRings(
   segs: readonly Seg[],
@@ -236,6 +249,8 @@ function truncateRings(
   if (c < 0) throw new Error(`chainGeometry: no edge ${cut.edgeId} in chain`);
   const at = Math.min(Math.max(cut.at, 1e-4), 1 - 1e-4);
   const point = segs[c].a.clone().lerp(segs[c].b, at);
+  if (beyondBand(drafts, dirs, c, point))
+    return { rings: drafts.slice(), cutIdx: -1, cutOwner: c };
   const beyond = (d: Draft) =>
     d.seg === c && d.pos.clone().sub(point).dot(dirs[c]) > 1e-9;
   const rings = drafts.filter((d) => !beyond(d));
