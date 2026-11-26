@@ -67,7 +67,7 @@ export class Studio implements UiHooks {
     this.treeMesh = deps.treeMesh;
     this.ui = deps.ui;
     this.picker = new Picker(deps.stage, deps.treeMesh);
-    deps.ui.bind(this);
+    deps.ui.bind(this.hooking());
   }
 
   boot() {
@@ -107,6 +107,25 @@ export class Studio implements UiHooks {
     clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
     saveSession(this.session());
+  }
+
+  /**
+   * Every user intent arrives through the UiHooks facade; wrap it once so
+   * each intent schedules a save instead of per-mutation call sites that a
+   * future mutator could forget.
+   */
+  private hooking(): UiHooks {
+    return new Proxy(this, {
+      get(target, key) {
+        const fn = Reflect.get(target, key, target);
+        return typeof fn === 'function'
+          ? (...args: unknown[]) => {
+              (fn as (...a: unknown[]) => unknown).apply(target, args);
+              target.scheduleSave();
+            }
+          : fn;
+      },
+    }) as UiHooks;
   }
 
   /** Continue a persisted session exactly where it left off. */
@@ -320,7 +339,6 @@ export class Studio implements UiHooks {
         this.formatParts(c.grade!.pts).join(' · '),
       7800,
     );
-    this.scheduleSave();
   }
 
   undoCut() {
@@ -332,7 +350,6 @@ export class Studio implements UiHooks {
     this.ui.notice(
       'Cut undone. The preceding wood, crop and canopy score are restored.',
     );
-    this.scheduleSave();
   }
 
   setTime(v: string | number) {
@@ -340,7 +357,6 @@ export class Studio implements UiHooks {
     this.ui.setSlider(this.hour);
     this.stage.updateSun(this.hour, this.guideSun, this.m);
     this.treeMesh.updateExposure(this.ctx());
-    this.scheduleSave();
   }
 
   layout() {
@@ -386,7 +402,6 @@ export class Studio implements UiHooks {
         (this.tree.stress > 0.4 ? ' Heavy crop reduced return bloom.' : ''),
       9500,
     );
-    this.scheduleSave();
   }
 
   onUndo() {
@@ -410,7 +425,6 @@ export class Studio implements UiHooks {
       'Foliage: ' + (this.showLeaves ? 'On' : 'Off'),
     );
     this.stage.invalidate();
-    this.scheduleSave();
   }
 
   onFruit() {
@@ -423,7 +437,6 @@ export class Studio implements UiHooks {
       'Fruit: ' + (this.showFruit ? 'On' : 'Off'),
     );
     this.stage.invalidate();
-    this.scheduleSave();
   }
 
   onHeat() {
@@ -431,14 +444,12 @@ export class Studio implements UiHooks {
     this.ui.pressed('heat', this.overlay);
     this.treeMesh.updateExposure(this.ctx());
     this.stage.invalidate();
-    this.scheduleSave();
   }
 
   onRays() {
     this.guideSun = !this.guideSun;
     this.ui.pressed('rays', this.guideSun);
     this.stage.updateSun(this.hour, this.guideSun, this.m);
-    this.scheduleSave();
   }
 
   onTime(value: string) {
@@ -454,7 +465,6 @@ export class Studio implements UiHooks {
     );
     this.recommend();
     this.hud();
-    this.scheduleSave();
   }
 
   onForm(form: TrainingSystem) {
@@ -477,7 +487,6 @@ export class Studio implements UiHooks {
     this.ui.pressed('learn', true, 'Learn mode: On');
     this.recommend();
     this.hud();
-    this.scheduleSave();
   }
 
   onPan() {
@@ -488,7 +497,6 @@ export class Studio implements UiHooks {
       this.panOnly,
       'One finger: ' + (this.panOnly ? 'Pan' : 'Orbit'),
     );
-    this.scheduleSave();
   }
 
   onFit() {
