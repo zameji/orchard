@@ -21,6 +21,15 @@ export interface MergedLoft {
   triRanges: Range[];
 }
 
+/** Copy ranges with each start shifted by `off`. */
+function offsetRanges(ranges: readonly Range[], off: number): Range[] {
+  return ranges.map((x) => ({
+    edgeId: x.edgeId,
+    start: x.start + off,
+    count: x.count,
+  }));
+}
+
 /**
  * Merge per-chain lofts into one draw call with merged edge-range maps. With
  * no chains the result is the documented empty-MergedLoft contract: empty
@@ -49,14 +58,8 @@ export function mergeChains(chains: readonly ChainGeometry[]): MergedLoft {
   let vo = 0,
     to = 0;
   for (const c of chains) {
-    for (const r of c.vertRanges)
-      vertRanges.push({
-        edgeId: r.edgeId,
-        start: r.start + vo,
-        count: r.count,
-      });
-    for (const r of c.triRanges)
-      triRanges.push({ edgeId: r.edgeId, start: r.start + to, count: r.count });
+    vertRanges.push(...offsetRanges(c.vertRanges, vo));
+    triRanges.push(...offsetRanges(c.triRanges, to));
     vo += c.vertexCount;
     to += c.triangleCount;
   }
@@ -244,16 +247,8 @@ export class LoftCache {
     // Ranges cover the whole slot: the slack joins the chain's last edge so
     // the merged ranges keep partitioning the buffer exactly, and the tail
     // triangles reference a single vertex and are never picked.
-    const vertRanges = g.vertRanges.map((x) => ({
-      edgeId: x.edgeId,
-      start: x.start + r.vertStart,
-      count: x.count,
-    }));
-    const triRanges = g.triRanges.map((x) => ({
-      edgeId: x.edgeId,
-      start: x.start + r.triStart,
-      count: x.count,
-    }));
+    const vertRanges = offsetRanges(g.vertRanges, r.vertStart);
+    const triRanges = offsetRanges(g.triRanges, r.triStart);
     vertRanges[vertRanges.length - 1].count += r.vertCap - g.vertexCount;
     triRanges[triRanges.length - 1].count += r.triCap - g.triangleCount;
     this.chainVertRanges[k] = vertRanges;
