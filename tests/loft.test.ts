@@ -435,15 +435,43 @@ describe('loft cache', () => {
   it('rewrites only the cut chain and restores exactly', () => {
     const cache = new LoftCache();
     const full = cache.build(nodes(), 5);
+    // The merged buffers are persistent and rewritten in place: snapshot
+    // whatever a test keeps across an applyCut.
+    const fullPos = Array.from(full.geometry.attributes.position.array);
+    const fullCut = slice(full, 11);
+    const fullSide = slice(full, 12);
     const cut = cache.applyCut({ edgeId: 11, at: 0.5 });
     expect(cut).not.toBeNull();
+    // One persistent geometry per build; previews never re-merge or reallocate.
+    expect(cut!.geometry).toBe(full.geometry);
     // The cut chain's geometry changes; the side chain's is untouched.
-    expect(slice(cut!, 11)).not.toEqual(slice(full, 11));
-    expect(slice(cut!, 12)).toEqual(slice(full, 12));
+    expect(slice(cut!, 11)).not.toEqual(fullCut);
+    expect(slice(cut!, 12)).toEqual(fullSide);
     // Restoring brings back the exact base geometry.
     const back = cache.applyCut(null);
     expect(Array.from(back!.geometry.attributes.position.array)).toEqual(
-      Array.from(full.geometry.attributes.position.array),
+      fullPos,
+    );
+    expect(slice(back!, 11)).toEqual(fullCut);
+    expect(slice(back!, 12)).toEqual(fullSide);
+  });
+
+  it('fits a preview that inserts a ring inside the chain reservation', () => {
+    // Cut inside the distal gap of the first edge: the cut ring is inserted
+    // without dropping a ring, so the preview is one ring (plus its cap
+    // centre) larger than the base chain and must still fit the fixed
+    // per-chain offsets and restore byte-exact.
+    const cache = new LoftCache();
+    const full = cache.build(nodes(), 5);
+    const fullPos = Array.from(full.geometry.attributes.position.array);
+    const fullSide = slice(full, 12);
+    const cut = cache.applyCut({ edgeId: 10, at: 0.93 });
+    expect(cut).not.toBeNull();
+    expect(cut!.geometry.attributes.position.array.length).toBe(fullPos.length);
+    expect(slice(cut!, 12)).toEqual(fullSide);
+    const back = cache.applyCut(null);
+    expect(Array.from(back!.geometry.attributes.position.array)).toEqual(
+      fullPos,
     );
   });
 

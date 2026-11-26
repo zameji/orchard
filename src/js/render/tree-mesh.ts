@@ -386,8 +386,12 @@ export class TreeMesh {
     }
     const merged = this.cache.applyCut(this.previewCut(selected));
     if (merged) {
-      this.wood.geometry.dispose();
-      this.wood.geometry = merged.geometry;
+      // The cache rewrites persistent buffers in place; swap only when a
+      // rebuild has handed us a new geometry since the last paint.
+      if (this.wood.geometry !== merged.geometry) {
+        this.wood.geometry.dispose();
+        this.wood.geometry = merged.geometry;
+      }
       this.wood.geometry.computeBoundingSphere();
     }
     // Thinning and heading removals recolor through the vertex-range map;
