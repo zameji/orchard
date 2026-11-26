@@ -28,13 +28,14 @@ A tree is composed from four axis vocabularies, resolved into one
   dominance, union angle, heading response, sag, caliper, plus an optional
   advice note composed into `food`.
 - **Training system** (`sim/systems.ts`) — the form: open-center flag,
-  scaffold angle and extension constants. Renovation is a separate
-  `PracticeMode` axis owned by the advisor, not a third form.
+  scaffold angle and extension constants, plus its teaching traits — the
+  guide line, the leader-cut penalty and the recommendation rules. Renovation
+  is a separate `PracticeMode` axis owned by the advisor, not a third form.
 
 Consumers read trait fields; no module outside the registries branches on
-species or habit ids. UI selectors filter habit and cultivar by species and
-preselect each habit's classic cultivar; the training form stays a free
-choice so "alternative form" remains a teaching case.
+species, habit, cultivar or form ids. UI selectors filter habit and cultivar
+by species and preselect each habit's classic cultivar; the training form
+stays a free choice so "alternative form" remains a teaching case.
 
 ## Consequences
 

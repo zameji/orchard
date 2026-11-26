@@ -48,10 +48,15 @@ export function resolve(
     cultivar,
     form: forms[formId],
     food: foodOf(habit, cultivar),
+    naturalFit: formId === habit.naturalForm,
   };
 }
 
 /** Same tree under a different training-system form. */
 export function withForm(spec: TreeSpec, formId: TrainingSystem): TreeSpec {
-  return { ...spec, form: forms[formId] };
+  return {
+    ...spec,
+    form: forms[formId],
+    naturalFit: formId === spec.habit.naturalForm,
+  };
 }

@@ -5,6 +5,8 @@
  * `resolve` in ./spec packs them into a TreeSpec.
  */
 
+import type { Branch, Model } from './types.js';
+
 export type SpeciesId = 'apple' | 'cherry' | 'peach';
 export type HabitId = 'spur' | 'tip' | 'mixed' | 'sweet' | 'tart' | 'renewal';
 export type TrainingSystem = 'leader' | 'vase';
@@ -109,6 +111,14 @@ export interface Cultivar {
   caliper: number;
 }
 
+/** One weighted recommendation rule of a training form. */
+export interface RecRule {
+  /** Positive weights compete for the headline reason; negative ones only nudge. */
+  w: number;
+  msg: string;
+  when: (q: Branch, m: Model) => boolean;
+}
+
 /** Training-system form: the architecture growth and grading follow. */
 export interface TrainingForm {
   id: TrainingSystem;
@@ -119,6 +129,12 @@ export interface TrainingForm {
   leaderLateralLen: number;
   scaffoldExtLen: number;
   rootedSideCount: number;
+  /** Structure penalty for a cut that takes leader-chain wood. */
+  leaderCutPenalty: number;
+  /** Advice line for training to this form. */
+  guide: string;
+  /** Cut recommendations applied outside the renovation program. */
+  rec: { protectLeader: boolean; rules: RecRule[] };
 }
 
 /** Resolved specification handed to the simulation and display. */
@@ -129,4 +145,6 @@ export interface TreeSpec {
   form: TrainingForm;
   /** Composed habit text plus optional cultivar note. */
   food: string;
+  /** The form is the habit's natural form. */
+  naturalFit: boolean;
 }
