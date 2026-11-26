@@ -1,7 +1,6 @@
 /**
- * Pure ring-loft pipeline: chain decomposition, ring drafting, parallel
- * transport frames, vertex/triangle emission and per-edge range maps. No
- * cross-call state; the merged-mesh cache lives in `loft-cache.js`.
+ * Pure ring-loft pipeline: chain decomposition, rings, transport frames,
+ * emission, per-edge range maps. Stateless; cache: `loft-cache.js`.
  */
 import * as THREE from 'three';
 
@@ -31,9 +30,8 @@ export interface Range {
 }
 
 /**
- * One loft ring: centerline point, radius, owning segment ordinal, transport
- * frame. `seg` is a chain-local ordinal (`Draft.seg`, `Run.seg`); global tree
- * edge ids are spelled `edgeId` everywhere (`Range.edgeId`, `ChainCut.edgeId`).
+ * One loft ring: centerline point, radius, transport frame, and `seg`, the
+ * chain-local segment ordinal (`Draft.seg`/`Run.seg`; global ids: `edgeId`).
  */
 export interface Ring {
   pos: THREE.Vector3;
@@ -188,11 +186,7 @@ function draftRings(segs: readonly Seg[]): {
           seg: i,
         });
       }
-      drafts.push({
-        pos: at,
-        r: (r0 + r1) / 2,
-        seg: i + 1,
-      });
+      drafts.push({ pos: at, r: (r0 + r1) / 2, seg: i + 1 });
       for (let k = 1; k <= BLENDS; k++) {
         const s = (w * k) / BLENDS;
         drafts.push({
@@ -205,18 +199,13 @@ function draftRings(segs: readonly Seg[]): {
       drafts.push({ pos: at, r: r1, seg: i + 1 });
     }
   }
-  drafts.push({
-    pos: joints[m],
-    r: segs[m - 1].r,
-    seg: m - 1,
-  });
+  drafts.push({ pos: joints[m], r: segs[m - 1].r, seg: m - 1 });
   return { drafts, dirs };
 }
 
 /**
- * Rotation-minimizing frames along the ring polyline: minimal rotations
- * only. The per-ring frame vectors are the output; the quaternion between
- * direction changes is one reused scratch.
+ * Rotation-minimizing frames along the ring polyline. The per-ring frame
+ * vectors are the output; the rotation quaternion is a reused scratch.
  */
 function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
   const first = dirs[drafts[0].seg];
@@ -247,13 +236,11 @@ function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
 const pastScratch = new THREE.Vector3();
 
 /** True when `point` lies past `origin` along `dir`: the one past-joint rule. */
-function isPast(
+const isPast = (
   point: THREE.Vector3,
   origin: THREE.Vector3,
   dir: THREE.Vector3,
-): boolean {
-  return pastScratch.subVectors(point, origin).dot(dir) > 1e-9;
-}
+) => pastScratch.subVectors(point, origin).dot(dir) > 1e-9;
 
 /** True when the cut lies past the chain band's distal joint. */
 function beyondBand(
@@ -268,9 +255,8 @@ function beyondBand(
 
 /**
  * Heading-preview rewrite: keep the chain up to the cut, drop the cut band's
- * rings past it and leave the later bands in place for the coral overlay. A
- * cut past a surviving continuation's joint lies off the band and leaves it
- * whole (cutIdx -1).
+ * rings past it, leave later bands in place for the coral overlay. A cut past
+ * the band's distal joint lies off it and leaves the band whole (cutIdx -1).
  */
 function truncateRings(
   segs: readonly Seg[],
@@ -296,9 +282,9 @@ function truncateRings(
 
 /**
  * Seg runs (one per edge) over the ring list, in chain order. One run per
- * edge, in edge order, is an invariant: emitTriangles, bandEnd and buildRanges
+ * edge in edge order is an invariant: emitTriangles, bandEnd and buildRanges
  * index runs by edge ordinal, so a band that lost all its rings would
- * misalign every later vertex and triangle range without error.
+ * misalign every later range without error.
  */
 function buildRuns(rings: readonly Draft[], m: number): Run[] {
   const runs: Run[] = [];
@@ -313,9 +299,9 @@ function buildRuns(rings: readonly Draft[], m: number): Run[] {
 }
 
 /**
- * Vertex-buffer layout. A mid-chain cut caps its ring; the cut ring of a
- * terminal cut becomes the chain tip and reuses the tip cap. Ring k's spoke
- * block shifts past the cut cap centre so each edge's range stays contiguous.
+ * Vertex-buffer layout. A mid-chain cut caps its ring; a terminal cut's ring
+ * becomes the chain tip and reuses the tip cap. Ring k's spoke block shifts
+ * past the cut cap centre so each edge's range stays contiguous.
  */
 function buildLayout(
   { m, n, sides }: Counts,
@@ -363,6 +349,11 @@ function emitVertices(
     p.toArray(positions, vi * 3);
     nrm.toArray(normals, vi * 3);
   };
+  const putCenter = (vi: number, pos: THREE.Vector3, t: THREE.Vector3) => {
+    p.copy(pos);
+    nrm.copy(t);
+    put(vi);
+  };
   // Root cap centre faces back down the chain.
   p.copy(rings[0].pos);
   nrm.copy(frames[0].t).negate();
@@ -376,43 +367,10 @@ function emitVertices(
       nrm.copy(radial);
       put(lay.base(k) + j);
     }
-    if (k === lay.cutIdx && lay.cappedCut) {
-      p.copy(pos);
-      nrm.copy(t);
-      put(lay.cutCenter);
-    }
-    if (k === rings.length - 1) {
-      p.copy(pos);
-      nrm.copy(t);
-      put(lay.tipCenter);
-    }
+    if (k === lay.cutIdx && lay.cappedCut) putCenter(lay.cutCenter, pos, t);
+    if (k === rings.length - 1) putCenter(lay.tipCenter, pos, t);
   }
   return { positions, normals };
-}
-
-/** Cap fan winding: flip faces the cap along -t (root); default faces +t (tip, cut). */
-function pushFan(
-  index: Uint32Array,
-  at: number,
-  center: number,
-  ringBase: number,
-  sides: number,
-  flip: boolean,
-): number {
-  for (let j = 0; j < sides; j++) {
-    const a = ringBase + j,
-      b = ringBase + ((j + 1) % sides);
-    if (flip) {
-      index[at++] = center;
-      index[at++] = b;
-      index[at++] = a;
-    } else {
-      index[at++] = center;
-      index[at++] = a;
-      index[at++] = b;
-    }
-  }
-  return at;
 }
 
 /** Last ring of edge i's band: the cut ring truncates, the tip closes. */
@@ -424,10 +382,8 @@ function bandEnd(i: number, { m, n, runs, lay }: EmitCtx) {
 
 /**
  * Triangle layout: root fan, band strips in edge order with the cut fan
- * inside the cut edge's range, tip fan at the end. The index buffer is
- * pre-sized from the run map: root and tip fans, two triangles per emitted
- * ring join and the optional cut fan. Returns the index buffer and each
- * band's strip start so triangle ranges stay per edge.
+ * inside the cut edge's range, tip fan at the end. The index is pre-sized
+ * from the run map; the return carries each band's strip start.
  */
 function emitTriangles(ctx: EmitCtx) {
   const { m, n, sides, runs, lay } = ctx;
@@ -440,7 +396,19 @@ function emitTriangles(ctx: EmitCtx) {
   }
   const triangles = sides * (2 * joins + 2 + (lay.cappedCut ? 1 : 0));
   const index = new Uint32Array(triangles * 3);
-  let at = pushFan(index, 0, 0, lay.base(0), sides, true);
+  // Cap fan winding: flip faces the cap along -t (root); default faces +t
+  // (tip, cut).
+  const fan = (at: number, center: number, ringBase: number, flip: boolean) => {
+    for (let j = 0; j < sides; j++) {
+      const a = ringBase + j,
+        b = ringBase + ((j + 1) % sides);
+      index[at++] = center;
+      index[at++] = flip ? b : a;
+      index[at++] = flip ? a : b;
+    }
+    return at;
+  };
+  let at = fan(0, 0, lay.base(0), true);
   const stripStart: number[] = [];
   for (let i = 0; i < m; i++) {
     stripStart.push(at / 3);
@@ -458,16 +426,9 @@ function emitTriangles(ctx: EmitCtx) {
         index[at++] = c2;
       }
     if (lay.cappedCut && i === lay.cutSeg)
-      at = pushFan(
-        index,
-        at,
-        lay.cutCenter,
-        lay.base(lay.cutIdx),
-        sides,
-        false,
-      );
+      at = fan(at, lay.cutCenter, lay.base(lay.cutIdx), false);
   }
-  at = pushFan(index, at, lay.tipCenter, lay.base(n - 1), sides, false);
+  at = fan(at, lay.tipCenter, lay.base(n - 1), false);
   if (at !== index.length)
     throw new Error(`emitTriangles: ${at} of ${index.length} indices written`);
   return { index, stripStart };
@@ -497,8 +458,7 @@ function buildRanges(
 /**
  * Ring-loft tube along one chain: parallel transport frames, analytic radial
  * normals, smoothstep blend flares, welded rings, capped ends. With `cut` the
- * chain is rewritten for a heading preview: the cut edge's band truncates at
- * the cut fraction and later bands stay in place for the coral overlay.
+ * cut band truncates at the cut fraction, later bands stay for the coral.
  */
 export function chainGeometry(
   segs: readonly Seg[],
