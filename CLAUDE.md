@@ -29,7 +29,7 @@ To validate a source change: `npm run typecheck`, `npm test`, `npm run lint`, `n
 - `src/js/render/` — Three.js display: `scene.ts` (`Stage`), `tree-mesh.ts` (`TreeMesh`), `picking.ts` (`Picker`), `loft.ts` (ring-loft chains + range maps, pure), `geometry.ts` (shared helpers/materials).
 - `src/js/main.ts` — composition root: constructs `Stage`, `TreeMesh`, `Tree`, `Advisor`, `Ui` and injects them into `Studio`.
 - `src/js/util.ts` — DOM and math helpers.
-- `tests/` — Vitest characterization suite (simulation core only) plus `helpers.ts`.
+- `tests/` — Vitest characterization suite (simulation core) plus pure-render unit tests (`loft.test.ts`) and `helpers.ts`.
 - `build.mjs` — build glue: globs exactly one `src/*.html`, copies it to `dist/index.html`; `tsc` emits `dist/js/`.
 - `docs/adrs/` — architecture decision records.
 
