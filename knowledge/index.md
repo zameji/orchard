@@ -6,3 +6,4 @@ Promote a hypothesis to a rule after 5 confirmations; demote a contradicted rule
 
 - [git-ops](git-ops/knowledge.md) — history rewrites, identity purges, force-push safety.
 - [persistence](persistence/knowledge.md) — localStorage sessions, tree state round-trips, decode validation.
+- [render](render/knowledge.md) — ring-loft wood, cut previews, face-to-edge picking, instance budgets.
