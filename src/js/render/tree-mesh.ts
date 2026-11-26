@@ -21,6 +21,7 @@ import {
   heatC,
   leafGeometry,
   leafMat,
+  loftMat,
   obj,
   planeMat,
   ringG,
@@ -28,7 +29,12 @@ import {
   stemMat,
   stickMatrix,
 } from './geometry.js';
+import type { ChainCut } from './loft.js';
+import { fillEdgeColors, LoftCache, type MergedLoft } from './loft-cache.js';
 import type { Stage } from './scene.js';
+
+/** Flat default tone of an instanced sprout stick. */
+const SPROUT_TONE = new THREE.Color(0x796240);
 
 export interface RenderCtx {
   t: TreeState;
@@ -42,39 +48,53 @@ export interface RenderCtx {
   selected: CutPlan | null;
 }
 
+/** One instanced sprout stick; main limbs live in the merged ring loft. */
 export interface Piece {
   q: Branch;
   a: THREE.Vector3;
   b: THREE.Vector3;
   r: number;
-  main: boolean;
   at: number;
 }
 
-/** Instanced tree display: wood, foliage, fruit, cut preview, markers. */
+/** Tree display: merged ring-loft wood, sprouts, foliage, fruit, markers. */
 export class TreeMesh {
-  wood: THREE.InstancedMesh | null = null;
+  wood: THREE.Mesh | null = null;
+  sprouts: THREE.InstancedMesh | null = null;
   foliage: THREE.InstancedMesh | null = null;
   fruitMesh: THREE.InstancedMesh | null = null;
   stems: THREE.InstancedMesh | null = null;
   extra: THREE.Mesh | null = null;
   pieces: Piece[] = [];
+  private cache = new LoftCache();
   private woodG!: THREE.CylinderGeometry;
   private leafG!: THREE.BufferGeometry;
   private fruitG!: THREE.BufferGeometry;
   private baseColors = new Float32Array();
+  private edgeColors = new Float32Array();
   private instant: Float32Array = new Float32Array();
+  private byId: ReadonlyMap<number, Branch> = new Map();
 
   constructor(private readonly stage: Stage) {}
 
+  /** Current merged loft and its per-edge range maps. */
+  get merged(): MergedLoft | null {
+    return this.cache.merged;
+  }
+
   private disposeInstances() {
-    for (const m of [this.wood, this.foliage, this.fruitMesh, this.stems])
+    for (const m of [this.sprouts, this.foliage, this.fruitMesh, this.stems])
       if (m) {
         this.stage.treeGroup.remove(m);
         m.dispose();
       }
+    if (this.wood) {
+      this.stage.treeGroup.remove(this.wood);
+      this.wood.geometry.dispose();
+    }
     if (this.extra) this.stage.treeGroup.remove(this.extra);
-    this.wood = this.foliage = this.fruitMesh = this.stems = this.extra = null;
+    this.wood = this.sprouts = this.foliage = null;
+    this.fruitMesh = this.stems = this.extra = null;
   }
 
   resetGeometries(spec: TreeSpec, caps: Caps) {
@@ -94,15 +114,36 @@ export class TreeMesh {
     return mesh;
   }
 
+  /** One welded ring-loft chain per tip-continuation path of main limbs. */
+  private buildLoft(m: Model, caps: Caps) {
+    this.byId = m.map;
+    const merged = this.cache.build(m.list, caps.sides);
+    this.edgeColors = new Float32Array(m.list.length * 3);
+    this.wood = new THREE.Mesh(merged.geometry, loftMat);
+    this.wood.geometry.computeBoundingSphere();
+    this.stage.treeGroup.add(this.wood);
+  }
+
   rebuild(ctx: RenderCtx) {
     const { t, m, spec, caps, showLeaves, showFruit } = ctx;
     this.disposeInstances();
     this.pieces = [];
-    for (const q of m.list)
-      this.pieces.push({ q, a: q.a, b: q.b, r: q.r, main: true, at: 0 });
-    for (const q of m.list)
+    this.buildLoft(m, caps);
+    this.buildSprouts(m, caps);
+    this.buildFoliage(t, m, spec, caps, showLeaves);
+    this.buildFruit(m, spec, showFruit);
+    this.stage.contact.scale.setScalar(Math.max(0.85, m.spread * 1.1));
+    this.updateExposure(ctx);
+    this.stage.invalidate();
+  }
+
+  /** One instanced bud stub per bud, within the whole-tree segment budget. */
+  private buildSprouts(m: Model, caps: Caps) {
+    // Main limbs consume one budget slot each; bud stubs share the rest.
+    const budget = caps.max - m.list.length;
+    outer: for (const q of m.list)
       for (const b of q.buds) {
-        if (this.pieces.length >= caps.max) break;
+        if (this.pieces.length >= budget) break outer;
         const a = atPoint(q, b.at),
           d = new THREE.Vector3(
             Math.cos(b.az),
@@ -114,19 +155,30 @@ export class TreeMesh {
           a,
           b: a.clone().addScaledVector(d, q.r + 0.025 + b.len * 0.5),
           r: Math.min(0.008, q.r * 0.52),
-          main: false,
           at: b.at,
         });
       }
-    this.wood = this.instances(this.woodG, barkMat, this.pieces.length);
+    this.sprouts = this.instances(this.woodG, barkMat, this.pieces.length);
     this.baseColors = new Float32Array(this.pieces.length * 3);
     for (let i = 0; i < this.pieces.length; i++) {
       const p = this.pieces[i];
-      this.wood.setMatrixAt(i, stickMatrix(p.a, p.b, p.r));
+      this.sprouts.setMatrixAt(i, stickMatrix(p.a, p.b, p.r));
     }
-    this.wood.instanceMatrix.needsUpdate = true;
-    this.wood.computeBoundingSphere();
-    // Choose clusters uniformly across shoot wood if the GPU budget is full.
+    this.sprouts.instanceMatrix.needsUpdate = true;
+    this.sprouts.computeBoundingSphere();
+  }
+
+  /**
+   * Choose clusters uniformly across shoot wood if the GPU budget is full,
+   * then place them by noise-driven station, azimuth, tilt, scale and tint.
+   */
+  private buildFoliage(
+    t: TreeState,
+    m: Model,
+    spec: TreeSpec,
+    caps: Caps,
+    showLeaves: boolean,
+  ) {
     const sites: [Branch, number, number][] = [];
     let requested = 0;
     for (const q of m.list) {
@@ -185,6 +237,10 @@ export class TreeMesh {
     }
     this.foliage.visible = showLeaves;
     this.foliage.computeBoundingSphere();
+  }
+
+  /** Fruit and stem instances, tinted by the habit's shade palette. */
+  private buildFruit(m: Model, spec: TreeSpec, showFruit: boolean) {
     this.fruitMesh = this.instances(this.fruitG, fruitMat, m.fruitCount);
     this.stems = this.instances(this.woodG, stemMat, m.fruitCount);
     let ix = 0;
@@ -229,9 +285,20 @@ export class TreeMesh {
     this.fruitMesh.visible = this.stems.visible = showFruit;
     this.fruitMesh.computeBoundingSphere();
     this.stems.computeBoundingSphere();
-    this.stage.contact.scale.setScalar(Math.max(0.85, m.spread * 1.1));
-    this.updateExposure(ctx);
-    this.stage.invalidate();
+  }
+
+  /** Exposure heat palette in place of bark tone. */
+  private heatColor(e: number) {
+    if (e < 0.48) col.copy(heatA).lerp(heatB, e / 0.48);
+    else col.copy(heatB).lerp(heatC, (e - 0.48) / 0.52);
+  }
+
+  /** Heat overlay, dead grey or the caller's default tone, resolved in `col`. */
+  private tone(q: Branch, e: number, overlay: boolean, fallback: THREE.Color) {
+    if (overlay) this.heatColor(e);
+    else if (q.s.dead) col.setHex(0x817f71);
+    else col.copy(fallback);
+    return col;
   }
 
   updateExposure(ctx: RenderCtx) {
@@ -241,22 +308,25 @@ export class TreeMesh {
     let avg = 0;
     for (const x of this.instant) avg += x;
     $('lightReading').textContent = '· mean ' + pct(avg / this.instant.length);
+    const bark = new THREE.Color();
+    for (const q of m.list) {
+      bark.setHSL(
+        0.063 + 0.014 * n(q, 90),
+        0.26 + 0.15 * Math.min(1, q.age / 4),
+        0.254 + 0.085 * n(q, 91) + 0.04 * (q.age === 0 ? 1 : 0),
+        THREE.SRGBColorSpace,
+      );
+      this.tone(q, this.instant[q.i], overlay, bark).toArray(
+        this.edgeColors,
+        q.i * 3,
+      );
+    }
     for (let i = 0; i < this.pieces.length; i++) {
-      const { q, main } = this.pieces[i],
-        e = this.instant[q.i];
-      if (overlay) {
-        if (e < 0.48) col.copy(heatA).lerp(heatB, e / 0.48);
-        else col.copy(heatB).lerp(heatC, (e - 0.48) / 0.52);
-      } else if (q.s.dead) col.setHex(0x817f71);
-      else if (!main) col.setHex(0x796240);
-      else
-        col.setHSL(
-          0.063 + 0.014 * n(q, 90),
-          0.26 + 0.15 * Math.min(1, q.age / 4),
-          0.254 + 0.085 * n(q, 91) + 0.04 * (q.age === 0 ? 1 : 0),
-          THREE.SRGBColorSpace,
-        );
-      col.toArray(this.baseColors, i * 3);
+      const { q } = this.pieces[i];
+      this.tone(q, this.instant[q.i], overlay, SPROUT_TONE).toArray(
+        this.baseColors,
+        i * 3,
+      );
     }
     this.paintWood(selected);
   }
@@ -265,38 +335,74 @@ export class TreeMesh {
     return (
       selected &&
       (selected.ids.has(p.q.s.id) ||
-        (selected.id === p.q.s.id && !p.main && p.at >= selected.at))
+        (selected.id === p.q.s.id && p.at >= selected.at))
     );
   }
 
-  paintWood(selected: CutPlan | null) {
-    if (!this.wood) return;
-    if (this.extra) {
-      this.stage.treeGroup.remove(this.extra);
-      this.extra = null;
-    }
+  /** Heading previews rewrite geometry; collar cuts only recolor. */
+  private previewCut(selected: CutPlan | null): ChainCut | null {
+    return selected && selected.at > 0
+      ? { edgeId: selected.id, at: selected.at }
+      : null;
+  }
+
+  /** Bark, dead or coral tone for one main edge through the range map. */
+  private edgeColor(id: number, selected: CutPlan | null) {
+    if (selected && selected.ids.has(id)) return coral;
+    const q = this.byId.get(id);
+    if (q) col.fromArray(this.edgeColors, q.i * 3);
+    return col;
+  }
+
+  /** Coral stub over the dropped rings of a heading cut. */
+  private addStub(selected: CutPlan | null) {
+    if (!selected || selected.at <= 0) return;
+    const q = this.byId.get(selected.id);
+    if (!q) return;
+    const end = atPoint(q, selected.at);
+    this.extra = new THREE.Mesh(this.woodG, cutMat);
+    this.extra.matrixAutoUpdate = false;
+    this.extra.matrix.copy(
+      stickMatrix(end, q.b, q.r * (1 - 0.28 * selected.at)),
+    );
+    this.stage.treeGroup.add(this.extra);
+  }
+
+  private paintSprouts(selected: CutPlan | null) {
+    if (!this.sprouts) return;
     for (let i = 0; i < this.pieces.length; i++) {
       const p = this.pieces[i];
       col.fromArray(this.baseColors, i * 3);
       if (this.removedPiece(p, selected)) col.copy(coral);
-      this.wood.setColorAt(i, col);
-      // Restore original transforms even when cancelling a partial-shoot cut.
-      if (p.main) {
-        let end = p.b;
-        if (selected && p.q.s.id === selected.id && selected.at > 0) {
-          end = atPoint(p.q, selected.at);
-          this.extra = new THREE.Mesh(this.woodG, cutMat);
-          this.extra.matrixAutoUpdate = false;
-          this.extra.matrix.copy(
-            stickMatrix(end, p.b, p.r * (1 - 0.28 * selected.at)),
-          );
-          this.stage.treeGroup.add(this.extra);
-        }
-        this.wood.setMatrixAt(i, stickMatrix(p.a, end, p.r));
-      }
+      this.sprouts.setColorAt(i, col);
     }
-    this.wood.instanceColor!.needsUpdate = true;
-    this.wood.instanceMatrix.needsUpdate = true;
+    if (this.sprouts.instanceColor)
+      this.sprouts.instanceColor.needsUpdate = true;
+  }
+
+  paintWood(selected: CutPlan | null) {
+    if (!this.wood || !this.merged) return;
+    if (this.extra) {
+      this.stage.treeGroup.remove(this.extra);
+      this.extra = null;
+    }
+    const merged = this.cache.applyCut(this.previewCut(selected));
+    if (merged) {
+      // The cache rewrites persistent buffers in place; swap only when a
+      // rebuild has handed us a new geometry since the last paint.
+      if (this.wood.geometry !== merged.geometry) {
+        this.wood.geometry.dispose();
+        this.wood.geometry = merged.geometry;
+      }
+      this.wood.geometry.computeBoundingSphere();
+    }
+    // Thinning and heading removals recolor through the vertex-range map;
+    // a heading preview rewrites only the cut chain's geometry.
+    fillEdgeColors(this.wood.geometry, this.cache.vertRanges, (id) =>
+      this.edgeColor(id, selected),
+    );
+    this.addStub(selected);
+    this.paintSprouts(selected);
     this.stage.invalidate();
   }
 
