@@ -480,7 +480,12 @@ export function chainGeometry(
   };
 }
 
-/** Merge per-chain lofts into one draw call with merged edge-range maps. */
+/**
+ * Merge per-chain lofts into one draw call with merged edge-range maps. With
+ * no chains the result is the documented empty-MergedLoft contract: empty
+ * range maps and a geometry with no attributes. A merge that cannot join the
+ * chain geometries throws here instead of failing later in fillEdgeColors.
+ */
 export function mergeChains(chains: readonly ChainGeometry[]): MergedLoft {
   if (!chains.length)
     return {
@@ -495,9 +500,9 @@ export function mergeChains(chains: readonly ChainGeometry[]): MergedLoft {
     g.setIndex(new THREE.BufferAttribute(c.index, 1));
     return g;
   });
-  const geometry =
-    mergeGeometries(geometries, false) ?? new THREE.BufferGeometry();
+  const geometry = mergeGeometries(geometries, false);
   for (const g of geometries) g.dispose();
+  if (!geometry) throw new Error('mergeChains: merge failed');
   const vertRanges: Range[] = [],
     triRanges: Range[] = [];
   let vo = 0,
