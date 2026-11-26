@@ -174,7 +174,11 @@ export class Studio implements UiHooks {
     }
     this.ui.closeTab();
     const c = new CutPlanner(this.tree, this.spec).plan(q, at);
-    c.grade = new Grader(this.tree, this.spec).assess(q, c, this.m);
+    c.grade = new Grader(this.tree, this.spec, this.practice).assess(
+      q,
+      c,
+      this.m,
+    );
     this.selected = c;
     this.treeMesh.paintWood(this.selected);
     this.redrawMarkers();
