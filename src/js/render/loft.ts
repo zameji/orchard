@@ -107,6 +107,21 @@ interface Layout {
   base: (k: number) => number;
 }
 
+/** Edge, ring and side counts shared across the emit phase. */
+interface Counts {
+  /** Edges in the chain. */
+  m: number;
+  /** Rings along the chain. */
+  n: number;
+  sides: number;
+}
+
+/** Emit-phase context: shared counts plus the run map and vertex layout. */
+interface EmitCtx extends Counts {
+  runs: readonly Run[];
+  lay: Layout;
+}
+
 /** A child continues its parent's chain through the tip, never across a fork. */
 export function isContinuation(parent: ChainNode, child: ChainNode): boolean {
   return !child.s.fork && child.s.at > 0.95;
@@ -298,10 +313,8 @@ function buildRuns(rings: readonly Draft[], m: number): Run[] {
  * block shifts past the cut cap centre so each edge's range stays contiguous.
  */
 function buildLayout(
-  n: number,
-  sides: number,
+  { m, n, sides }: Counts,
   trunc: Trunc | undefined,
-  m: number,
 ): Layout {
   const cutIdx = trunc ? trunc.cutIdx : -1;
   const cutSeg = trunc ? trunc.cutSeg : -1;
@@ -328,9 +341,9 @@ function spoke(f: THREE.Vector3, b: THREE.Vector3, j: number, sides: number) {
 function emitVertices(
   rings: readonly Draft[],
   frames: readonly Frame[],
-  lay: Layout,
-  sides: number,
+  ctx: EmitCtx,
 ) {
+  const { sides, lay } = ctx;
   const positions = new Float32Array(lay.vertexCount * 3);
   const normals = new Float32Array(lay.vertexCount * 3);
   const put = (vi: number, p: THREE.Vector3, nrm: THREE.Vector3) => {
@@ -370,13 +383,7 @@ function pushFan(
 }
 
 /** Last ring of edge i's band: the cut ring truncates, the tip closes. */
-function bandEnd(
-  i: number,
-  m: number,
-  n: number,
-  runs: readonly Run[],
-  lay: Layout,
-) {
+function bandEnd(i: number, { m, n, runs, lay }: EmitCtx) {
   if (i === m - 1) return n - 1;
   if (lay.cappedCut && i === lay.cutSeg) return lay.cutIdx;
   return runs[i + 1].start;
@@ -387,19 +394,14 @@ function bandEnd(
  * inside the cut edge's range, tip fan at the end. Returns the index buffer
  * and each band's strip start so triangle ranges stay per edge.
  */
-function emitTriangles(
-  m: number,
-  n: number,
-  sides: number,
-  runs: readonly Run[],
-  lay: Layout,
-) {
+function emitTriangles(ctx: EmitCtx) {
+  const { m, n, sides, runs, lay } = ctx;
   const index: number[] = [];
   pushFan(index, 0, lay.base(0), sides, true);
   const stripStart: number[] = [];
   for (let i = 0; i < m; i++) {
     stripStart.push(index.length / 3);
-    const end = bandEnd(i, m, n, runs, lay);
+    const end = bandEnd(i, ctx);
     for (let k = runs[i].start; k < end; k++)
       for (let j = 0; j < sides; j++) {
         const a = lay.base(k) + j,
@@ -418,12 +420,11 @@ function emitTriangles(
 /** Per-edge vertex and triangle ranges: cap centres join their ring's edge. */
 function buildRanges(
   segs: readonly Seg[],
-  runs: readonly Run[],
-  lay: Layout,
+  ctx: EmitCtx,
   stripStart: readonly number[],
   total: number,
 ) {
-  const m = segs.length;
+  const { m, runs, lay } = ctx;
   const triRanges: Range[] = [];
   const vertRanges: Range[] = [];
   for (let i = 0; i < m; i++) {
@@ -455,23 +456,12 @@ export function chainGeometry(
   const rings = trunc ? trunc.rings : drafts;
   const frames = transport(rings, dirs);
   const runs = buildRuns(rings, m);
-  const lay = buildLayout(rings.length, sides, trunc, m);
-  const { positions, normals } = emitVertices(rings, frames, lay, sides);
-  const { index, stripStart } = emitTriangles(
-    m,
-    rings.length,
-    sides,
-    runs,
-    lay,
-  );
+  const counts: Counts = { m, n: rings.length, sides };
+  const ctx: EmitCtx = { ...counts, runs, lay: buildLayout(counts, trunc) };
+  const { positions, normals } = emitVertices(rings, frames, ctx);
+  const { index, stripStart } = emitTriangles(ctx);
   const total = index.length / 3;
-  const { triRanges, vertRanges } = buildRanges(
-    segs,
-    runs,
-    lay,
-    stripStart,
-    total,
-  );
+  const { triRanges, vertRanges } = buildRanges(segs, ctx, stripStart, total);
   return {
     edgeIds: segs.map((s) => s.id),
     rings: rings.map((d, k) => ({
@@ -487,7 +477,7 @@ export function chainGeometry(
     index: new Uint32Array(index),
     vertRanges,
     triRanges,
-    vertexCount: lay.vertexCount,
+    vertexCount: ctx.lay.vertexCount,
     triangleCount: total,
   };
 }
