@@ -5,8 +5,11 @@ import {
   decomposeChains,
   edgeAtFace,
   fillEdgeColors,
+  LoftCache,
   mergeChains,
   type ChainNode,
+  type LoftNode,
+  type MergedLoft,
   type Range,
   type Seg,
 } from '../src/js/render/loft.js';
@@ -27,6 +30,23 @@ function attach(parent: ChainNode, child: ChainNode): ChainNode {
   child.par = parent;
   parent.kids.push(child);
   return child;
+}
+
+/** Chain node carrying one edge's straight display segment. */
+function segNode(
+  id: number,
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  r: number,
+  opts: { at?: number; fork?: boolean } = {},
+): LoftNode {
+  return {
+    s: { id, at: opts.at ?? 1, fork: opts.fork ?? false, len: a.distanceTo(b) },
+    a,
+    b,
+    r,
+    kids: [],
+  };
 }
 
 /** Chain of straight edges with per-edge radii and a gentle bend per joint. */
@@ -59,7 +79,7 @@ function runAround(rs: number[], k: number): number[] {
   return rs.slice(i, j + 1);
 }
 
-function partitions(ranges: Range[], total: number) {
+function partitions(ranges: readonly Range[], total: number) {
   let at = 0;
   for (const r of ranges) {
     expect(r.start).toBe(at);
@@ -376,5 +396,61 @@ describe('preview rewrite', () => {
     expect(cut.rings.length).toBe(full.rings.length);
     expect(cut.vertexCount).toBe(full.vertexCount);
     expect(Array.from(cut.positions)).toEqual(Array.from(full.positions));
+  });
+});
+
+describe('loft cache', () => {
+  /** Tip continuation [10, 11] plus a mid-parent side chain [12]. */
+  function nodes(): LoftNode[] {
+    const root = segNode(10, v(0, 0, 0), v(0, 1, 0), 0.1);
+    const tip = segNode(11, v(0, 1, 0), v(0, 2, 0), 0.08);
+    const side = segNode(12, v(1, 1, 0), v(2, 1, 0), 0.05, { at: 0.5 });
+    attach(root, tip);
+    attach(root, side);
+    return [root, tip, side];
+  }
+
+  /** Position coordinates of one edge's vertex range in a merged geometry. */
+  function slice(m: MergedLoft, edgeId: number): number[] {
+    const r = m.vertRanges.find((x) => x.edgeId === edgeId)!;
+    return Array.from(
+      m.geometry.attributes.position.array.slice(
+        r.start * 3,
+        (r.start + r.count) * 3,
+      ),
+    );
+  }
+
+  it('builds per-edge ranges across chains in order', () => {
+    const cache = new LoftCache();
+    const merged = cache.build(nodes(), 5);
+    partitions(cache.vertRanges, merged.geometry.attributes.position.count);
+    partitions(cache.triRanges, merged.geometry.index!.count / 3);
+    expect(cache.vertRanges.map((r) => r.edgeId)).toEqual([10, 11, 12]);
+    expect(cache.triRanges.map((r) => r.edgeId)).toEqual([10, 11, 12]);
+  });
+
+  it('rewrites only the cut chain and restores exactly', () => {
+    const cache = new LoftCache();
+    const full = cache.build(nodes(), 5);
+    const cut = cache.applyCut({ edgeId: 11, at: 0.5 });
+    expect(cut).not.toBeNull();
+    // The cut chain's geometry changes; the side chain's is untouched.
+    expect(slice(cut!, 11)).not.toEqual(slice(full, 11));
+    expect(slice(cut!, 12)).toEqual(slice(full, 12));
+    // Restoring brings back the exact base geometry.
+    const back = cache.applyCut(null);
+    expect(Array.from(back!.geometry.attributes.position.array)).toEqual(
+      Array.from(full.geometry.attributes.position.array),
+    );
+  });
+
+  it('skips a rewrite when the preview is unchanged', () => {
+    const cache = new LoftCache();
+    cache.build(nodes(), 5);
+    expect(cache.applyCut({ edgeId: 11, at: 0.5 })).not.toBeNull();
+    expect(cache.applyCut({ edgeId: 11, at: 0.5 })).toBeNull();
+    expect(cache.applyCut(null)).not.toBeNull();
+    expect(cache.applyCut(null)).toBeNull();
   });
 });

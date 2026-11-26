@@ -16,6 +16,9 @@ export interface Seg {
   r: number;
 }
 
+/** Chain-decomposition node carrying one edge's display segment. */
+export type LoftNode = ChainNode & Pick<Seg, 'a' | 'b' | 'r'>;
+
 /** Contiguous vertex or triangle range owned by one edge. */
 export interface Range {
   edgeId: number;
@@ -548,4 +551,80 @@ export function fillEdgeColors(
     for (let i = r.start; i < r.start + r.count; i++) c.toArray(arr, i * 3);
   }
   attr.needsUpdate = true;
+}
+
+function sameCut(a: ChainCut | null, b: ChainCut | null): boolean {
+  return (
+    a === b ||
+    (a !== null && b !== null && a.edgeId === b.edgeId && a.at === b.at)
+  );
+}
+
+/**
+ * Chain-geometry cache behind the merged main-limb loft: builds every chain
+ * once and rewrites only the chain a heading preview touches. The only place
+ * loft geometry is rewritten in place; per-edge range maps come from the
+ * current merged geometry.
+ */
+export class LoftCache {
+  private chainSegs: Seg[][] = [];
+  private baseGeoms: ChainGeometry[] = [];
+  private chainGeoms: ChainGeometry[] = [];
+  private chainOf = new Map<number, number>();
+  private appliedCut: ChainCut | null = null;
+  private sides = 6;
+  merged: MergedLoft | null = null;
+
+  /** Full geometry for every chain of `list`, replacing any preview. */
+  build(list: readonly LoftNode[], sides: number): MergedLoft {
+    this.sides = sides;
+    const chains = decomposeChains(list);
+    this.chainSegs = chains.map((chain) =>
+      chain.map((q) => ({ id: q.s.id, a: q.a, b: q.b, r: q.r })),
+    );
+    this.baseGeoms = this.chainSegs.map((s) => chainGeometry(s, this.sides));
+    this.chainGeoms = this.baseGeoms.slice();
+    this.chainOf = new Map();
+    chains.forEach((chain, i) => {
+      for (const q of chain) this.chainOf.set(q.s.id, i);
+    });
+    this.appliedCut = null;
+    return this.remerge();
+  }
+
+  /**
+   * Heading-preview rewrite: truncate the cut chain at `cut`, leave the rest
+   * in place and restore every chain when `cut` is null. Returns the merged
+   * geometry, or null when `cut` is the applied preview (nothing rewritten).
+   */
+  applyCut(cut: ChainCut | null): MergedLoft | null {
+    if (sameCut(cut, this.appliedCut)) return null;
+    const touched = new Set<number>();
+    for (const c of [this.appliedCut, cut]) {
+      const i = c ? this.chainOf.get(c.edgeId) : undefined;
+      if (i !== undefined) touched.add(i);
+    }
+    for (const k of touched)
+      this.chainGeoms[k] =
+        cut && this.chainOf.get(cut.edgeId) === k
+          ? chainGeometry(this.chainSegs[k], this.sides, cut)
+          : this.baseGeoms[k];
+    this.appliedCut = cut;
+    return this.remerge();
+  }
+
+  /** Per-edge vertex ranges of the current merged geometry. */
+  get vertRanges(): readonly Range[] {
+    return this.merged ? this.merged.vertRanges : [];
+  }
+
+  /** Per-edge triangle ranges of the current merged geometry. */
+  get triRanges(): readonly Range[] {
+    return this.merged ? this.merged.triRanges : [];
+  }
+
+  private remerge(): MergedLoft {
+    this.merged = mergeChains(this.chainGeoms);
+    return this.merged;
+  }
 }

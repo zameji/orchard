@@ -30,14 +30,10 @@ import {
   stickMatrix,
 } from './geometry.js';
 import {
-  chainGeometry,
-  decomposeChains,
   fillEdgeColors,
-  mergeChains,
+  LoftCache,
   type ChainCut,
-  type ChainGeometry,
   type MergedLoft,
-  type Seg,
 } from './loft.js';
 import type { Stage } from './scene.js';
 
@@ -73,8 +69,8 @@ export class TreeMesh {
   fruitMesh: THREE.InstancedMesh | null = null;
   stems: THREE.InstancedMesh | null = null;
   extra: THREE.Mesh | null = null;
-  merged: MergedLoft | null = null;
   pieces: Piece[] = [];
+  private cache = new LoftCache();
   private woodG!: THREE.CylinderGeometry;
   private leafG!: THREE.BufferGeometry;
   private fruitG!: THREE.BufferGeometry;
@@ -82,14 +78,13 @@ export class TreeMesh {
   private edgeColors = new Float32Array();
   private instant: Float32Array = new Float32Array();
   private byId: ReadonlyMap<number, Branch> = new Map();
-  private chainSegs: Seg[][] = [];
-  private baseGeoms: ChainGeometry[] = [];
-  private chainGeoms: ChainGeometry[] = [];
-  private chainOf = new Map<number, number>();
-  private appliedCut: ChainCut | null = null;
-  private sides = 6;
 
   constructor(private readonly stage: Stage) {}
+
+  /** Current merged loft and its per-edge range maps. */
+  get merged(): MergedLoft | null {
+    return this.cache.merged;
+  }
 
   private disposeInstances() {
     for (const m of [this.sprouts, this.foliage, this.fruitMesh, this.stems])
@@ -126,20 +121,9 @@ export class TreeMesh {
   /** One welded ring-loft chain per tip-continuation path of main limbs. */
   private buildLoft(m: Model, caps: Caps) {
     this.byId = m.map;
-    this.sides = caps.sides;
-    const chains = decomposeChains(m.list);
-    this.chainSegs = chains.map((chain) =>
-      chain.map((q) => ({ id: q.s.id, a: q.a, b: q.b, r: q.r })),
-    );
-    this.baseGeoms = this.chainSegs.map((s) => chainGeometry(s, this.sides));
-    this.chainGeoms = this.baseGeoms.slice();
-    this.chainOf = new Map();
-    chains.forEach((chain, i) => {
-      for (const q of chain) this.chainOf.set(q.s.id, i);
-    });
+    const merged = this.cache.build(m.list, caps.sides);
     this.edgeColors = new Float32Array(m.list.length * 3);
-    this.merged = mergeChains(this.chainGeoms);
-    this.wood = new THREE.Mesh(this.merged.geometry, loftMat);
+    this.wood = new THREE.Mesh(merged.geometry, loftMat);
     this.wood.geometry.computeBoundingSphere();
     this.stage.treeGroup.add(this.wood);
   }
@@ -148,7 +132,6 @@ export class TreeMesh {
     const { t, m, spec, caps, showLeaves, showFruit } = ctx;
     this.disposeInstances();
     this.pieces = [];
-    this.appliedCut = null;
     this.buildLoft(m, caps);
     this.buildSprouts(m, caps);
     this.buildFoliage(t, m, spec, caps, showLeaves);
@@ -358,38 +341,11 @@ export class TreeMesh {
     );
   }
 
-  /** Rewrite just the chains a heading preview touches; keep the rest. */
-  private rewriteChains(prev: ChainCut | null, next: ChainCut | null) {
-    const touched = new Set<number>();
-    for (const c of [prev, next]) {
-      const i = c ? this.chainOf.get(c.edgeId) : undefined;
-      if (i !== undefined) touched.add(i);
-    }
-    for (const k of touched)
-      this.chainGeoms[k] =
-        next && this.chainOf.get(next.edgeId) === k
-          ? chainGeometry(this.chainSegs[k], this.sides, next)
-          : this.baseGeoms[k];
-    this.merged = mergeChains(this.chainGeoms);
-    if (this.wood) {
-      this.wood.geometry.dispose();
-      this.wood.geometry = this.merged.geometry;
-      this.wood.geometry.computeBoundingSphere();
-    }
-  }
-
   /** Heading previews rewrite geometry; collar cuts only recolor. */
   private previewCut(selected: CutPlan | null): ChainCut | null {
     return selected && selected.at > 0
       ? { edgeId: selected.id, at: selected.at }
       : null;
-  }
-
-  private sameCut(a: ChainCut | null, b: ChainCut | null) {
-    return (
-      a === b ||
-      (a !== null && b !== null && a.edgeId === b.edgeId && a.at === b.at)
-    );
   }
 
   /** Bark, dead or coral tone for one main edge through the range map. */
@@ -432,14 +388,15 @@ export class TreeMesh {
       this.stage.treeGroup.remove(this.extra);
       this.extra = null;
     }
-    const desired = this.previewCut(selected);
-    if (!this.sameCut(desired, this.appliedCut)) {
-      this.rewriteChains(this.appliedCut, desired);
-      this.appliedCut = desired;
+    const merged = this.cache.applyCut(this.previewCut(selected));
+    if (merged) {
+      this.wood.geometry.dispose();
+      this.wood.geometry = merged.geometry;
+      this.wood.geometry.computeBoundingSphere();
     }
     // Thinning and heading removals recolor through the vertex-range map;
-    // heading previews truncate only the cut chain's geometry above.
-    fillEdgeColors(this.wood.geometry, this.merged.vertRanges, (id) =>
+    // a heading preview rewrites only the cut chain's geometry.
+    fillEdgeColors(this.wood.geometry, this.cache.vertRanges, (id) =>
       this.edgeColor(id, selected),
     );
     this.addStub(selected);
