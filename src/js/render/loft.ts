@@ -336,7 +336,7 @@ function emitVertices(
   return { positions, normals };
 }
 
-/** Cap fan: outward when flip, into the tube when not. */
+/** Cap fan winding: flip faces the cap along -t (root); default faces +t (tip, cut). */
 function pushFan(
   index: number[],
   center: number,
