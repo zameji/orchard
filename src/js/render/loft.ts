@@ -189,7 +189,7 @@ function draftRings(segs: readonly Seg[]): {
         });
       }
       drafts.push({
-        pos: at.clone(),
+        pos: at,
         r: (r0 + r1) / 2,
         seg: i + 1,
       });
@@ -202,7 +202,7 @@ function draftRings(segs: readonly Seg[]): {
         });
       }
     } else {
-      drafts.push({ pos: at.clone(), r: r1, seg: i + 1 });
+      drafts.push({ pos: at, r: r1, seg: i + 1 });
     }
   }
   drafts.push({
@@ -213,7 +213,11 @@ function draftRings(segs: readonly Seg[]): {
   return { drafts, dirs };
 }
 
-/** Rotation-minimizing frames along the ring polyline: minimal rotations only. */
+/**
+ * Rotation-minimizing frames along the ring polyline: minimal rotations
+ * only. The per-ring frame vectors are the output; the quaternion between
+ * direction changes is one reused scratch.
+ */
 function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
   const first = dirs[drafts[0].seg];
   const ref =
@@ -221,12 +225,13 @@ function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
       ? new THREE.Vector3(0, 1, 0)
       : new THREE.Vector3(1, 0, 0);
   const f = new THREE.Vector3().crossVectors(first, ref).normalize();
+  const rot = new THREE.Quaternion();
   const frames: Frame[] = [];
   let prev = first;
   for (const d of drafts) {
     const t = dirs[d.seg];
     if (t !== prev) {
-      f.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(prev, t));
+      f.applyQuaternion(rot.setFromUnitVectors(prev, t));
       prev = t;
     }
     frames.push({
@@ -238,13 +243,16 @@ function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
   return frames;
 }
 
+/** Scratch for `isPast`: valid only until the next call. */
+const pastScratch = new THREE.Vector3();
+
 /** True when `point` lies past `origin` along `dir`: the one past-joint rule. */
 function isPast(
   point: THREE.Vector3,
   origin: THREE.Vector3,
   dir: THREE.Vector3,
 ): boolean {
-  return point.clone().sub(origin).dot(dir) > 1e-9;
+  return pastScratch.subVectors(point, origin).dot(dir) > 1e-9;
 }
 
 /** True when the cut lies past the chain band's distal joint. */
@@ -328,10 +336,16 @@ function buildLayout(
   };
 }
 
+/** Scratch for `spoke`: valid only until the next call. */
+const spokeScratch = new THREE.Vector3();
+
 /** Radial spoke direction on a ring from its transport frame. */
 function spoke(f: THREE.Vector3, b: THREE.Vector3, j: number, sides: number) {
   const a = (j * Math.PI * 2) / sides;
-  return f.clone().multiplyScalar(Math.cos(a)).addScaledVector(b, Math.sin(a));
+  return spokeScratch
+    .copy(f)
+    .multiplyScalar(Math.cos(a))
+    .addScaledVector(b, Math.sin(a));
 }
 
 /** Ring vertices and analytic normals: radial on walls, axial on caps. */
@@ -343,22 +357,35 @@ function emitVertices(
   const { sides, lay } = ctx;
   const positions = new Float32Array(lay.vertexCount * 3);
   const normals = new Float32Array(lay.vertexCount * 3);
-  const put = (vi: number, p: THREE.Vector3, nrm: THREE.Vector3) => {
+  const p = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+  const put = (vi: number) => {
     p.toArray(positions, vi * 3);
     nrm.toArray(normals, vi * 3);
   };
   // Root cap centre faces back down the chain.
-  put(0, rings[0].pos, frames[0].t.clone().negate());
+  p.copy(rings[0].pos);
+  nrm.copy(frames[0].t).negate();
+  put(0);
   for (let k = 0; k < rings.length; k++) {
     const { pos, r } = rings[k];
     const { t, f, b } = frames[k];
     for (let j = 0; j < sides; j++) {
       const radial = spoke(f, b, j, sides);
-      put(lay.base(k) + j, pos.clone().addScaledVector(radial, r), radial);
+      p.copy(pos).addScaledVector(radial, r);
+      nrm.copy(radial);
+      put(lay.base(k) + j);
     }
-    if (k === lay.cutIdx && lay.cappedCut)
-      put(lay.cutCenter, pos.clone(), t.clone());
-    if (k === rings.length - 1) put(lay.tipCenter, pos.clone(), t.clone());
+    if (k === lay.cutIdx && lay.cappedCut) {
+      p.copy(pos);
+      nrm.copy(t);
+      put(lay.cutCenter);
+    }
+    if (k === rings.length - 1) {
+      p.copy(pos);
+      nrm.copy(t);
+      put(lay.tipCenter);
+    }
   }
   return { positions, normals };
 }
