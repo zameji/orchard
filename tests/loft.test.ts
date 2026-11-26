@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import {
   chainGeometry,
   decomposeChains,
+  previewSlack,
+  type ChainCut,
   type ChainNode,
   type LoftNode,
   type Range,
@@ -489,14 +491,21 @@ describe('loft cache', () => {
     const merged = cache.build(nodes(), 5);
     // Chain-local indices must be rebased into each chain's slot: every
     // triangle of an edge may only reference vertices inside the block its
-    // chain owns (its edges' ranges, reservation slack included).
+    // chain owns (its edges' ranges, reservation slack included). Membership
+    // comes from the decomposition, not from the fixture's edge ids.
     const assertBlocks = (m: MergedLoft) => {
       const idx = m.geometry.index!;
-      for (const r of m.triRanges) {
-        const ids = r.edgeId === 12 ? [12] : [10, 11];
-        const rs = ids.map((i) => m.vertRanges.find((x) => x.edgeId === i)!);
+      const blockOf = new Map<number, { lo: number; hi: number }>();
+      for (const chain of decomposeChains(nodes())) {
+        const rs = chain.map(
+          (q) => m.vertRanges.find((x) => x.edgeId === q.s.id)!,
+        );
         const lo = Math.min(...rs.map((x) => x.start));
         const hi = Math.max(...rs.map((x) => x.start + x.count));
+        for (const q of chain) blockOf.set(q.s.id, { lo, hi });
+      }
+      for (const r of m.triRanges) {
+        const { lo, hi } = blockOf.get(r.edgeId)!;
         for (let t = r.start; t < r.start + r.count; t++)
           for (let k = 0; k < 3; k++) {
             const vi = idx.getX(t * 3 + k);
@@ -508,5 +517,33 @@ describe('loft cache', () => {
     assertBlocks(merged);
     assertBlocks(cache.applyCut({ edgeId: 11, at: 0.5 })!);
     assertBlocks(cache.applyCut(null)!);
+  });
+
+  it('keeps every cut shape inside the chain reservation', () => {
+    // The slot contract `previewSlack` encodes: no cut may grow a chain past
+    // base + slack, and no cut may overflow the cache reservation. Sweeping
+    // cut positions is what turns that doc-only invariant into a test.
+    const sides = 5;
+    const segs = makeSegs([0.1, 0.08]);
+    const base = chainGeometry(segs, sides);
+    const slack = previewSlack(sides);
+    const cuts: ChainCut[] = [];
+    for (const edgeId of [10, 11])
+      for (const at of [0.05, 0.25, 0.5, 0.75, 0.93, 0.95, 0.99])
+        cuts.push({ edgeId, at });
+    for (const cut of cuts) {
+      const g = chainGeometry(segs, sides, cut);
+      expect(g.vertexCount).toBeLessThanOrEqual(
+        base.vertexCount + slack.verts,
+      );
+      expect(g.triangleCount).toBeLessThanOrEqual(
+        base.triangleCount + slack.tris,
+      );
+    }
+    const cache = new LoftCache();
+    cache.build(nodes(), sides);
+    for (const cut of cuts)
+      expect(() => cache.applyCut(cut)).not.toThrow();
+    expect(() => cache.applyCut(null)).not.toThrow();
   });
 });
