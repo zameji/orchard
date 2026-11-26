@@ -1,5 +1,6 @@
 import type {
   Cultivar,
+  CultivarId,
   Habit,
   HabitId,
   Species,
@@ -32,7 +33,7 @@ export function defaultCultivar(sp: SpeciesId, habitId: HabitId): Cultivar {
 export function resolve(
   sp: SpeciesId,
   habitId: HabitId,
-  cultivarId: string,
+  cultivarId: CultivarId,
   formId: TrainingSystem,
 ): TreeSpec {
   const spRec: Species = species[sp],

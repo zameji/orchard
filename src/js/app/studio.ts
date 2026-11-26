@@ -356,17 +356,18 @@ export class Studio implements UiHooks {
   onForm(form: TrainingSystem) {
     this.spec = withForm(this.spec, form);
     this.config = { ...this.config, form };
-    this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
-    this.learning = true;
-    this.ui.pressed('learn', true, 'Learn mode: On');
-    this.recommend();
-    this.hud();
+    this.afterSpecChange();
   }
 
   onPractice(practice: PracticeMode) {
     this.practice = practice;
     if (practice === 'renovate') this.renovationStart = this.tree.year;
     this.config = { ...this.config, practice };
+    this.afterSpecChange();
+  }
+
+  /** Rebuild the advisor and refresh guidance after a config change. */
+  private afterSpecChange() {
     this.advisor = new Advisor(this.spec, this.practice, this.renovationStart);
     this.learning = true;
     this.ui.pressed('learn', true, 'Learn mode: On');

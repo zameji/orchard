@@ -4,6 +4,7 @@ import { cultivarsFor } from '../sim/cultivars.js';
 import { speciesList } from '../sim/species.js';
 import { formList } from '../sim/systems.js';
 import type {
+  CultivarId,
   HabitId,
   PracticeMode,
   SpeciesId,
@@ -14,7 +15,7 @@ import type { CapsKey, Rec } from '../sim/types.js';
 export interface Config {
   species: SpeciesId;
   habit: HabitId;
-  cultivar: string;
+  cultivar: CultivarId;
   form: TrainingSystem;
   practice: PracticeMode;
   start: number;
@@ -264,7 +265,7 @@ export class Ui {
     return {
       species: $('species').value,
       habit: $('habit').value,
-      cultivar: $('cultivar').value,
+      cultivar: $('cultivar').value as CultivarId,
       form: $('form').value,
       practice: $('practice').value,
       start: clamp(+$('startYear').value, 1, 15),
@@ -302,7 +303,7 @@ export class Ui {
   }
 
   /** Rebuild habit and cultivar lists for the species; keep picks when asked. */
-  private fillSelectors(pick?: { habit?: HabitId; cultivar?: string }) {
+  private fillSelectors(pick?: { habit?: HabitId; cultivar?: CultivarId }) {
     const sp: SpeciesId = $('species').value;
     const hs = habitsFor(sp);
     const habitSel = $('habit');

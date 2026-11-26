@@ -1,7 +1,16 @@
-import type { Species, SpeciesId } from './axes.js';
+import type { Species, SpeciesId, SpeciesRender } from './axes.js';
 
 const stoneHeading =
   'Heading stone fruit costs renewal wood and provokes upright regrowth. ';
+
+/** Stem shape of large round fruit; each species only differs in hang. */
+const radialStem: Omit<SpeciesRender['fruitStem'], 'hang'> = {
+  sideConst: 0,
+  sideRadMul: 0.68,
+  dropConst: 0.014,
+  dropShade: 0,
+  width: 0.0021,
+};
 
 export const speciesList: Species[] = [
   {
@@ -24,14 +33,7 @@ export const speciesList: Species[] = [
         topDimple: [0.15, 16],
         bottomDimple: [0.08, 18],
       },
-      fruitStem: {
-        sideConst: 0,
-        sideRadMul: 0.68,
-        dropConst: 0.014,
-        dropShade: 0,
-        width: 0.0021,
-        hang: 0.73,
-      },
+      fruitStem: { ...radialStem, hang: 0.73 },
     },
   },
   {
@@ -84,14 +86,7 @@ export const speciesList: Species[] = [
         topDimple: [0, 16],
         bottomDimple: [0, 18],
       },
-      fruitStem: {
-        sideConst: 0,
-        sideRadMul: 0.68,
-        dropConst: 0.014,
-        dropShade: 0,
-        width: 0.0021,
-        hang: 0.95,
-      },
+      fruitStem: { ...radialStem, hang: 0.95 },
     },
   },
 ];
