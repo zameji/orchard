@@ -222,6 +222,15 @@ function transport(drafts: readonly Draft[], dirs: readonly THREE.Vector3[]) {
   return frames;
 }
 
+/** True when `point` lies past `origin` along `dir`: the one past-joint rule. */
+function isPast(
+  point: THREE.Vector3,
+  origin: THREE.Vector3,
+  dir: THREE.Vector3,
+): boolean {
+  return point.clone().sub(origin).dot(dir) > 1e-9;
+}
+
 /** True when the cut lies past the chain band's distal joint. */
 function beyondBand(
   drafts: readonly Draft[],
@@ -230,7 +239,7 @@ function beyondBand(
   point: THREE.Vector3,
 ) {
   const joint = drafts.find((d) => d.seg > c);
-  return !!joint && point.clone().sub(joint.pos).dot(dirs[c]) > 1e-9;
+  return !!joint && isPast(point, joint.pos, dirs[c]);
 }
 
 /**
@@ -251,8 +260,7 @@ function truncateRings(
   const point = segs[c].a.clone().lerp(segs[c].b, at);
   if (beyondBand(drafts, dirs, c, point))
     return { rings: drafts.slice(), cutIdx: -1, cutOwner: c };
-  const beyond = (d: Draft) =>
-    d.seg === c && d.pos.clone().sub(point).dot(dirs[c]) > 1e-9;
+  const beyond = (d: Draft) => d.seg === c && isPast(d.pos, point, dirs[c]);
   const rings = drafts.filter((d) => !beyond(d));
   const last = rings.reduce((acc, d, k) => (d.seg === c ? k : acc), -1);
   const insert = { pos: point, r: segs[c].r, seg: c };
