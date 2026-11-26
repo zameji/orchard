@@ -141,9 +141,9 @@ export class TreeMesh {
   private buildSprouts(m: Model, caps: Caps) {
     // Main limbs consume one budget slot each; bud stubs share the rest.
     const budget = caps.max - m.list.length;
-    for (const q of m.list)
+    outer: for (const q of m.list)
       for (const b of q.buds) {
-        if (this.pieces.length >= budget) break;
+        if (this.pieces.length >= budget) break outer;
         const a = atPoint(q, b.at),
           d = new THREE.Vector3(
             Math.cos(b.az),
